@@ -1,0 +1,18 @@
+[user]
+	name = {{ .name }}
+	email = {{ .email }}
+
+[credential "azrepos:org/{{ .adoOrg }}"]
+	username = {{ .email }}
+	azureAuthority = https://login.microsoftonline.com/{{ .tenantId }}
+
+[core]
+	autocrlf = true
+	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
+
+[credential]
+	azreposCredentialType = oauth
+	msauthUseBroker = true
+	msauthUseDefaultAccount = true
+	helper = manager
+

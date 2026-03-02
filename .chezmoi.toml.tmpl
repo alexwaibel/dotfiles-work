@@ -1,0 +1,11 @@
+[data]
+    email = "{{ promptStringOnce . "email" "Corporate email address (e.g. user@microsoft.com)" }}"
+    name = "Alex Waibel"
+    tenantId = "{{ promptStringOnce . "tenantId" "Corporate Azure AD tenant ID" }}"
+    adoOrg = "{{ promptStringOnce . "adoOrg" "Azure DevOps organization" }}"
+
+[bitwarden]
+    command = "bw"
+
+[bitwarden.secrets]
+    unlock = "auto"

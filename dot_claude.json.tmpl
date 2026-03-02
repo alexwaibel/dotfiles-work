@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "azure-devops": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@azure-devops/mcp",
+        "{{ .adoOrg }}",
+        "-d",
+        "work",
+        "work-items",
+        "-a",
+        "azcli"
+      ]
+    }
+  }
+}
