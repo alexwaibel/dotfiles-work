@@ -1,5 +1,5 @@
 # chezmoi run_once_before script — first-time machine bootstrap
-# Installs tools via winget, configures the SSH agent, and logs into Bitwarden.
+# Installs tools via winget, disables the Windows SSH agent (Bitwarden provides its own), and logs into Bitwarden.
 
 #Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
@@ -33,22 +33,20 @@ Write-Host 'Adding Azure DevOps CLI extension ...'
 az extension add --name azure-devops --yes 2>$null
 Write-Host 'azure-devops extension ready.'
 
-# --- 3. Configure OpenSSH Authentication Agent ---
+# --- 3. Disable Windows OpenSSH agent (Bitwarden SSH agent replaces it) ---
 
-Write-Host 'Configuring OpenSSH Authentication Agent ...'
 $sshAgent = Get-Service -Name ssh-agent -ErrorAction SilentlyContinue
-if ($sshAgent) {
-    if ($sshAgent.StartType -ne 'Automatic') {
-        Set-Service -Name ssh-agent -StartupType Automatic
-        Write-Host '  StartupType set to Automatic.'
+if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne 'Disabled')) {
+    Write-Host 'Disabling Windows OpenSSH Authentication Agent (Bitwarden provides its own) ...'
+    Write-Host '  Requesting elevated permissions (UAC prompt) ...'
+    $proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command', 'Stop-Service ssh-agent -ErrorAction SilentlyContinue; Set-Service ssh-agent -StartupType Disabled' -Wait -PassThru
+    if ($proc.ExitCode -eq 0) {
+        Write-Host '  Windows ssh-agent stopped and disabled.'
+    } else {
+        Write-Warning 'Failed to disable ssh-agent — you may need to disable it manually from an admin shell.'
     }
-    if ($sshAgent.Status -ne 'Running') {
-        Start-Service -Name ssh-agent
-        Write-Host '  Service started.'
-    }
-    Write-Host 'ssh-agent is running.'
 } else {
-    Write-Warning 'ssh-agent service not found — OpenSSH may not be installed.'
+    Write-Host 'Windows ssh-agent already disabled or not found.'
 }
 
 # --- 4. Bitwarden login ---

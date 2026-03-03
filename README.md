@@ -85,7 +85,7 @@ This single command will:
 - Run the bootstrap script (`run_once_before_install-and-setup.ps1`) which automatically:
   - Installs Bitwarden desktop, Bitwarden CLI, and Azure CLI via winget
   - Adds the Azure DevOps CLI extension
-  - Configures and starts the OpenSSH Authentication Agent service
+  - Disables the Windows OpenSSH agent (Bitwarden SSH agent replaces it)
   - Prompts you to log in to Bitwarden (if not already logged in)
 - Unlock Bitwarden and render templates with secrets injected
 - Apply everything to your home directory
