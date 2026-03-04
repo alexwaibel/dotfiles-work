@@ -18,9 +18,9 @@
 | {{ .name }} | {{ .path }} | {{ .adoProject }} |
 {{- end }}
 
-## State File Schema (~/cockpit/state/ado-tasks.md)
+## State File (~/cockpit/state/ado-tasks.md)
 
-The state file persists across sessions. Only the main cockpit session writes it — agents never touch it.
+Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs. ADO is the source of truth for everything else (priority, state, titles). Only the main cockpit session writes this file; agents never touch it.
 
 ```markdown
 # Sprint State
@@ -29,23 +29,16 @@ The state file persists across sessions. Only the main cockpit session writes it
 - Last Updated: <ISO timestamp>
 
 ## Work Items
-| ID | Type | Title | ADO State | Status | Priority | Fitness | Branch | PR | Notes |
-|----|------|-------|-----------|--------|----------|---------|--------|----|-------|
-
-## Agent Log
-| Timestamp | Item(s) | Action | Details |
-|-----------|---------|--------|---------|
+| ID | Status | Fitness | Branch | PR | Notes |
+|----|--------|---------|--------|----|-------|
 ```
 
 **Status**: `queued` | `in-progress` | `done` | `blocked` | `skipped`
-**Priority**: `P1-livesite` > `P1-active` > `P2-deadline` > `P3`
-**Fitness** (agent readiness):
+**Fitness** (agent readiness — assessed during `work`):
 - `ready` — Clear scope, agent can implement autonomously
 - `investigate` — Needs root-cause analysis first; agent can research but not fix
 - `needs-spec` — Requirements unclear, needs human planning first
 - `needs-human` — Requires internal tooling/access an agent can't use
-- `batch` — Part of a group; handled with related items
-**Agent Log actions**: `agent-started` | `agent-completed` | `agent-failed` | `pr-opened` | `ado-updated` | `status-check`
 
 ---
 
@@ -55,30 +48,34 @@ Fetch current sprint, reconcile with state file, report priorities.
 
 1. Fetch current iteration: `work_list_team_iterations` (project, team, timeframe=current)
 2. Read existing state file
-3. **Sprint rollover check**: If the state file's Sprint ID differs from the current iteration (or file is empty):
-   - Carry forward any items from the old sprint that are still `queued`, `in-progress`, or `blocked` (i.e., not done/skipped)
-   - For carried-forward items, update their iteration path in ADO to the new sprint via `wit_update_work_item` (path: `/fields/System.IterationPath`, value: new iteration path)
-   - Report which items were moved to the new sprint
+3. **Sprint rollover**: If the state file's Sprint ID differs from the current iteration (or file is empty):
+   - Carry forward items that are still `queued`, `in-progress`, or `blocked`
+   - Update their iteration path in ADO via `wit_update_work_item` (path: `/fields/System.IterationPath`, value: new iteration path)
+   - Report which items were moved
 4. Fetch sprint work items: `wit_get_work_items_for_iteration`
 5. Batch-fetch details: `wit_get_work_items_batch_by_ids` (fields: Id, Title, State, WorkItemType, AssignedTo, Tags, Priority)
 6. Filter to items assigned to {{ .email }}
-7. Reconcile:
+7. Reconcile state file:
    - New ADO items → add as `queued`
-   - Removed from sprint → note in Notes column
-   - ADO state changes → update ADO State column
-   - Compute priority: `P1-livesite` (title/tags contain "livesite"), `P1-active` (ADO State=Active), `P2-deadline` (DMTargetDate within 21 days), `P3` (rest)
+   - Items no longer in sprint and not in-progress → remove
    - Identify batches (similar titles/tags) → note in Notes column
-8. Write updated state file
-9. Report summary table sorted by priority
+8. **Priority hygiene**: Flag items where ADO priority looks wrong based on signals:
+   - `[livesite]` or `[live site]` in title but Priority != 1 or 2 → suggest Priority 2
+   - `DMTargetDate` within 21 days but Priority = 99 (unset) → suggest Priority 2
+   - Active state but Priority = 99 → suggest Priority 3
+   - Present mismatches to user in a table with current vs. suggested priority
+   - On user confirmation, batch-update via `wit_update_work_items_batch` (path: `/fields/Microsoft.VSTS.Common.Priority`)
+9. Write updated state file
+10. Report summary table sorted by ADO priority, with ADO state and tags fetched live
 
 ---
 
 ## Command: work
 
-Triage actionable items, assess fitness, propose a plan, launch on user confirmation.
+Assess agent fitness for items, propose a plan, launch on user confirmation.
 
 **Usage:**
-- `work` — auto-select highest-priority queued items
+- `work` — auto-select next queued items by ADO priority
 - `work <ID>` — target a specific work item
 - `work <ID1> <ID2> ...` — target multiple specific items
 
@@ -86,21 +83,20 @@ Triage actionable items, assess fitness, propose a plan, launch on user confirma
 1. Read state file. If empty/stale, run `standup` first.
 2. Count items with Status=`in-progress`. If >= 3 → report "at capacity", stop.
 3. Select items:
-   - If IDs given: use those (fetch from ADO if not in state file yet)
-   - If no IDs: pick up to (3 - active) queued items in priority order (batches = 1 slot)
-4. **Assess fitness** for each candidate — fetch full description via `wit_get_work_item` (expand=all):
+   - If IDs given: use those (fetch from ADO and add to state file if not tracked yet)
+   - If no IDs: pick up to (3 - active) queued items by ADO priority (fetch live). Batched items count as 1 slot.
+4. **Assess fitness** — fetch full description via `wit_get_work_item` (expand=all):
    - Scope clear enough to implement? → `ready`
    - Root cause unknown but researchable in code? → `investigate`
    - Requirements vague / needs design? → `needs-spec`
    - Needs internal tooling / dashboards / manual deploys? → `needs-human`
-   - Part of a batch? → `batch` (with fitness rating for the group)
-5. **Propose to user** — present a table with: ID, title, priority, fitness assessment (1-2 sentence rationale), proposed action (code agent / investigation agent / skip). For batches: show grouped items.
+5. **Propose to user** — present a table: ID, title (from ADO), fitness assessment with 1-2 sentence rationale, proposed action (code agent / investigation agent / defer). For batches: show grouped items.
 6. **Wait for user confirmation** before launching.
 7. On confirmation, for each approved item:
    - **Code agents**: Launch background Agent (isolation: "worktree", run_in_background: true). Create in-session task via TaskCreate. Update state → `in-progress`, set Branch.
    - **Investigation agents**: Launch background Agent (no worktree, run_in_background: true). Create in-session task. Update state → `in-progress`.
    - **Deferred items**: Update state → `blocked` or `skipped` with rationale.
-8. Append to Agent Log. Report what was launched.
+8. Update state file.
 
 ### Agent Prompt — Code Tasks
 ```
@@ -154,13 +150,12 @@ Check in-flight agents, update state, report progress.
 
 1. Read state file
 2. Check in-session tasks via TaskList:
-   - Completed → update state to `done`, append Agent Log
+   - Completed → update state to `done`
    - Still running → report as in-progress
    - Missing (session restart) → check for branch in repo (`git branch -r`); if found with commits → `done-needs-review`, else → `blocked` ("agent session lost")
-3. Refresh ADO state for in-progress/done items via batch fetch
-4. Check for PRs on branches without a PR recorded
-5. Write updated state file
-6. Report: in-progress, completed, blocked, needs-human-attention
+3. Check for PRs on branches without a PR recorded
+4. Write updated state file
+5. Report: in-progress, completed, blocked, needs-human-attention
 
 ---
 
@@ -172,9 +167,3 @@ Check in-flight agents, update state, report progress.
 - Only open DRAFT PRs — never publish or merge
 - Never modify the user's current working tree or checked-out branch
 - State file (~/cockpit/state/ado-tasks.md) is the ONLY mutable file the cockpit session writes to (besides agent worktrees)
-
-## Task Prioritization
-1. Active items before Proposed
-2. Items with near-term due dates (check DMTargetDate tag)
-3. Bugs with live-site impact ([livesite] tag) before others
-4. Group related items (e.g., batch of similar bugs) for efficient parallel work
