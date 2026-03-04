@@ -1,5 +1,7 @@
 # dotfiles
 
+> **Warning:** This repo is a personal chezmoi configuration that writes directly to your home directory. Running `chezmoi init --apply` will overwrite files like `~/.gitconfig`, `~/.claude.json`, and others. It also runs a bootstrap script that installs software and modifies system services. **Do not apply blindly** — review the source files and `.chezmoi.toml.tmpl` first, and use `chezmoi diff` to preview changes before applying.
+
 Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io/) with secrets from [Bitwarden](https://bitwarden.com/).
 
 ## What's Managed
@@ -8,9 +10,11 @@ Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io
 |---|---|---|
 | `~/.claude/config.json` | `dot_claude/config.json.tmpl` | Template — API key from Bitwarden |
 | `~/.claude/settings.json` | `dot_claude/settings.json` | Plain file — model preference |
-| `~/.claude.json` | `dot_claude.json.tmpl` | Template — Azure DevOps MCP server config (uses `az login` for auth) |
+| `~/.claude/CLAUDE.md` | `dot_claude/CLAUDE.md` | Plain file — global Claude Code instructions |
+| `~/.claude.json` | `modify_dot_claude.json.ps1.tmpl` | Modify script — merges ADO MCP server config into existing file |
 | `~/.gitconfig` | `dot_gitconfig.tmpl` | Template — git identity & credentials |
 | `~/.config/git/ignore` | `dot_config/git/ignore` | Plain file — global gitignore |
+| `~/cockpit/CLAUDE.md` | `cockpit/CLAUDE.md.tmpl` | Template — ADO task management workflow & agent orchestration |
 
 ### Not Managed (auto-generated / machine-specific)
 
