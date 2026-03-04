@@ -1,0 +1,32 @@
+# chezmoi:template:left-delimiter="{{" right-delimiter="}}"
+# Merge mcpServers into existing .claude.json without overwriting runtime state
+
+$stdin = [Console]::In.ReadToEnd()
+
+if ($stdin.Trim()) {
+    $config = $stdin | ConvertFrom-Json
+} else {
+    $config = [PSCustomObject]@{}
+}
+
+$mcpServers = @{
+    "azure-devops" = @{
+        command = "cmd"
+        args = @(
+            "/c", "npx", "-y", "@azure-devops/mcp",
+            "{{ .ado.org }}",
+            "-d", "work", "work-items",
+            "-a", "azcli"
+        )
+    }
+}
+
+if ($config.PSObject.Properties["mcpServers"]) {
+    foreach ($key in $mcpServers.Keys) {
+        $config.mcpServers | Add-Member -NotePropertyName $key -NotePropertyValue $mcpServers[$key] -Force
+    }
+} else {
+    $config | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]$mcpServers) -Force
+}
+
+$config | ConvertTo-Json -Depth 10

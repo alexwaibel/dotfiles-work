@@ -1,0 +1,36 @@
+# Cockpit — ADO Task Management Workflow
+
+## Session Startup
+When starting a session, always read ~/cockpit/state/ado-tasks.md for current task state.
+
+## ADO Config
+- Org: {{ .ado.org }}
+- Project: {{ .ado.project }}
+- Team: {{ .ado.team }}
+- Area Path: {{ .ado.areaPath }}
+
+## Repo Map
+| Repo | Local Path | ADO Project |
+|------|-----------|-------------|
+{{- range .ado.repos }}
+| {{ .name }} | {{ .path }} | {{ .adoProject }} |
+{{- end }}
+
+## Workflow Commands
+- "standup" — Fetch current sprint items, read task state, report priorities and progress
+- "work" — Triage unstarted items, spin up parallel agents on actionable tasks
+- "status" — Quick check on running/blocked agents
+
+## Safety Rules
+- NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
+- NEVER run destructive git commands (reset --hard, clean -f, etc.) outside of worktrees
+- ALWAYS use isolated worktrees (via Agent tool with isolation: "worktree") for implementation
+- Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
+- Only open DRAFT PRs — never publish or merge
+- Never modify the user's current working tree or checked-out branch
+
+## Task Prioritization
+1. Active items before Proposed
+2. Items with near-term due dates (check DMTargetDate tag)
+3. Bugs with live-site impact ([livesite] tag) before others
+4. Group related items (e.g., batch of similar bugs) for efficient parallel work

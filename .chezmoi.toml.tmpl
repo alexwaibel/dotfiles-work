@@ -1,8 +1,24 @@
 [data]
     email = "{{ promptStringOnce . "email" "Corporate email address (e.g. user@microsoft.com)" }}"
-    name = "Alex Waibel"
+    name = "{{ promptStringOnce . "name" "Full name" }}"
     tenantId = "{{ promptStringOnce . "tenantId" "Corporate Azure AD tenant ID" }}"
-    adoOrg = "{{ promptStringOnce . "adoOrg" "Azure DevOps organization" }}"
+
+{{- $ado := dig "ado" (dict) . }}
+[data.ado]
+    org = "{{ promptStringOnce $ado "org" "ADO organization for work items" }}"
+    project = "{{ promptStringOnce $ado "project" "ADO project for work items (e.g. the board project)" }}"
+    team = "{{ promptStringOnce $ado "team" "ADO team for sprint/backlog queries (from Sprints board team dropdown)" }}"
+    areaPath = '{{ promptStringOnce $ado "areaPath" "Work item area path (e.g. Project\\Area\\SubArea)" }}'
+    branchPrefix = "{{ promptStringOnce $ado "branchPrefix" "Git branch prefix for Claude work (e.g. alias/claude/)" }}"
+
+{{- $repos := dig "ado" (dict) . | dig "repos" (list (dict)) }}
+{{- $repo0 := index $repos 0 }}
+# Repos: each maps a git repo to its ADO project for PR/work-item linking.
+# Add more [[data.ado.repos]] blocks below for additional repos.
+[[data.ado.repos]]
+    name = "{{ promptStringOnce $repo0 "name" "Repo name" }}"
+    path = "{{ promptStringOnce $repo0 "path" "Repo local path (e.g. ~/my-repo)" }}"
+    adoProject = "{{ promptStringOnce $repo0 "adoProject" "ADO project containing this repo (may differ from the board project)" }}"
 
 [bitwarden]
     command = "bw"

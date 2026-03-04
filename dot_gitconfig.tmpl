@@ -2,12 +2,12 @@
 	name = {{ .name }}
 	email = {{ .email }}
 
-[credential "azrepos:org/{{ .adoOrg }}"]
+[credential "azrepos:org/{{ .ado.org }}"]
 	username = {{ .email }}
 	azureAuthority = https://login.microsoftonline.com/{{ .tenantId }}
 
 [core]
-	autocrlf = true
+	autocrlf = false
 	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
 
 [credential]
