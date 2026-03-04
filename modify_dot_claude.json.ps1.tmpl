@@ -22,6 +22,14 @@ $mcpServers = @{
 }
 
 if ($config.PSObject.Properties["mcpServers"]) {
+    # Remove servers no longer managed by chezmoi
+    $existing = @($config.mcpServers.PSObject.Properties.Name)
+    foreach ($key in $existing) {
+        if (-not $mcpServers.ContainsKey($key)) {
+            $config.mcpServers.PSObject.Properties.Remove($key)
+        }
+    }
+    # Add/update managed servers
     foreach ($key in $mcpServers.Keys) {
         $config.mcpServers | Add-Member -NotePropertyName $key -NotePropertyValue $mcpServers[$key] -Force
     }

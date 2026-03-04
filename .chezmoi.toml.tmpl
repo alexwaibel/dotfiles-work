@@ -20,6 +20,11 @@
     path = "{{ promptStringOnce $repo0 "path" "Repo local path (e.g. ~/my-repo)" }}"
     adoProject = "{{ promptStringOnce $repo0 "adoProject" "ADO project containing this repo (may differ from the board project)" }}"
 
+{{- $teams := dig "teams" (dict) . }}
+[data.teams]
+    teamId = "{{ promptStringOnce $teams "teamId" "Teams team ID for agent notifications (from Graph API)" }}"
+    channelId = "{{ promptStringOnce $teams "channelId" "Teams channel ID for agent notifications (from Graph API)" }}"
+
 [bitwarden]
     command = "bw"
 

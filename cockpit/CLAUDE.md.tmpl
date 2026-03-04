@@ -18,6 +18,27 @@
 | {{ .name }} | {{ .path }} | {{ .adoProject }} |
 {{- end }}
 
+## Teams Notifications
+
+Agents post status updates to Teams via `az rest` (Graph API). No MCP server needed.
+
+- Team ID: `{{ .teams.teamId }}`
+- Channel ID: `{{ .teams.channelId }}`
+
+**Post a message:**
+```bash
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages" \
+  --headers "Content-Type=application/json" \
+  --body '{"body":{"contentType":"html","content":"<MESSAGE>"}}'
+```
+
+**Read recent messages:**
+```bash
+az rest --method GET \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages?\$top=10"
+```
+
 ## State File (~/cockpit/state/ado-tasks.md)
 
 Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs. ADO is the source of truth for everything else (priority, state, titles). Only the main cockpit session writes this file; agents never touch it.
@@ -121,6 +142,13 @@ Base: main (or master — check git)
 7. Post an ADO comment on the work item with: summary of changes, PR link, open questions
 8. Update ADO work item state to Active if currently Proposed
 
+## Notifications
+Post to Teams when: starting work, opening a PR, blocked/need help, or done.
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages" \
+  --headers "Content-Type=application/json" \
+  --body '{"body":{"contentType":"html","content":"<b>[WI#<ID>]</b> <status message>"}}'
+
 ## Safety
 - ONLY modify files related to this work item
 - ONLY push to branch: {{ .ado.branchPrefix }}<id>-<slug>
@@ -140,6 +168,7 @@ You are investigating ADO work item #<ID>: <TITLE>
 2. Identify root cause, relevant files, potential fix approach
 3. Post findings as an ADO comment: root cause, affected files, recommended fix, complexity estimate
 4. Do NOT make code changes, create branches, or open PRs
+5. Post a summary to Teams when done or if blocked (use the notification command above)
 ```
 
 ---
