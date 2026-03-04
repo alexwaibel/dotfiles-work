@@ -1,7 +1,9 @@
 # Cockpit — ADO Task Management Workflow
 
 ## Session Startup
-When starting a session, always read ~/cockpit/state/ado-tasks.md for current task state.
+1. Read ~/cockpit/state/ado-tasks.md for current task state
+2. If the file is empty or the Sprint ID is stale (sprint dates have passed), run "standup" automatically
+3. If state exists, summarize: items tracked, in-progress/done/blocked counts
 
 ## ADO Config
 - Org: {{ .ado.org }}
@@ -16,10 +18,151 @@ When starting a session, always read ~/cockpit/state/ado-tasks.md for current ta
 | {{ .name }} | {{ .path }} | {{ .adoProject }} |
 {{- end }}
 
-## Workflow Commands
-- "standup" — Fetch current sprint items, read task state, report priorities and progress
-- "work" — Triage unstarted items, spin up parallel agents on actionable tasks
-- "status" — Quick check on running/blocked agents
+## State File Schema (~/cockpit/state/ado-tasks.md)
+
+The state file persists across sessions. Only the main cockpit session writes it — agents never touch it.
+
+```markdown
+# Sprint State
+- Sprint: <name>
+- Sprint ID: <guid>
+- Last Updated: <ISO timestamp>
+
+## Work Items
+| ID | Type | Title | ADO State | Status | Priority | Fitness | Branch | PR | Notes |
+|----|------|-------|-----------|--------|----------|---------|--------|----|-------|
+
+## Agent Log
+| Timestamp | Item(s) | Action | Details |
+|-----------|---------|--------|---------|
+```
+
+**Status**: `queued` | `in-progress` | `done` | `blocked` | `skipped`
+**Priority**: `P1-livesite` > `P1-active` > `P2-deadline` > `P3`
+**Fitness** (agent readiness):
+- `ready` — Clear scope, agent can implement autonomously
+- `investigate` — Needs root-cause analysis first; agent can research but not fix
+- `needs-spec` — Requirements unclear, needs human planning first
+- `needs-human` — Requires internal tooling/access an agent can't use
+- `batch` — Part of a group; handled with related items
+**Agent Log actions**: `agent-started` | `agent-completed` | `agent-failed` | `pr-opened` | `ado-updated` | `status-check`
+
+---
+
+## Command: standup
+
+Fetch current sprint, reconcile with state file, report priorities.
+
+1. Fetch current iteration: `work_list_team_iterations` (project, team, timeframe=current)
+2. Read existing state file
+3. **Sprint rollover check**: If the state file's Sprint ID differs from the current iteration (or file is empty):
+   - Carry forward any items from the old sprint that are still `queued`, `in-progress`, or `blocked` (i.e., not done/skipped)
+   - For carried-forward items, update their iteration path in ADO to the new sprint via `wit_update_work_item` (path: `/fields/System.IterationPath`, value: new iteration path)
+   - Report which items were moved to the new sprint
+4. Fetch sprint work items: `wit_get_work_items_for_iteration`
+5. Batch-fetch details: `wit_get_work_items_batch_by_ids` (fields: Id, Title, State, WorkItemType, AssignedTo, Tags, Priority)
+6. Filter to items assigned to {{ .email }}
+7. Reconcile:
+   - New ADO items → add as `queued`
+   - Removed from sprint → note in Notes column
+   - ADO state changes → update ADO State column
+   - Compute priority: `P1-livesite` (title/tags contain "livesite"), `P1-active` (ADO State=Active), `P2-deadline` (DMTargetDate within 21 days), `P3` (rest)
+   - Identify batches (similar titles/tags) → note in Notes column
+8. Write updated state file
+9. Report summary table sorted by priority
+
+---
+
+## Command: work
+
+Triage actionable items, assess fitness, propose a plan, launch on user confirmation.
+
+**Usage:**
+- `work` — auto-select highest-priority queued items
+- `work <ID>` — target a specific work item
+- `work <ID1> <ID2> ...` — target multiple specific items
+
+### Procedure
+1. Read state file. If empty/stale, run `standup` first.
+2. Count items with Status=`in-progress`. If >= 3 → report "at capacity", stop.
+3. Select items:
+   - If IDs given: use those (fetch from ADO if not in state file yet)
+   - If no IDs: pick up to (3 - active) queued items in priority order (batches = 1 slot)
+4. **Assess fitness** for each candidate — fetch full description via `wit_get_work_item` (expand=all):
+   - Scope clear enough to implement? → `ready`
+   - Root cause unknown but researchable in code? → `investigate`
+   - Requirements vague / needs design? → `needs-spec`
+   - Needs internal tooling / dashboards / manual deploys? → `needs-human`
+   - Part of a batch? → `batch` (with fitness rating for the group)
+5. **Propose to user** — present a table with: ID, title, priority, fitness assessment (1-2 sentence rationale), proposed action (code agent / investigation agent / skip). For batches: show grouped items.
+6. **Wait for user confirmation** before launching.
+7. On confirmation, for each approved item:
+   - **Code agents**: Launch background Agent (isolation: "worktree", run_in_background: true). Create in-session task via TaskCreate. Update state → `in-progress`, set Branch.
+   - **Investigation agents**: Launch background Agent (no worktree, run_in_background: true). Create in-session task. Update state → `in-progress`.
+   - **Deferred items**: Update state → `blocked` or `skipped` with rationale.
+8. Append to Agent Log. Report what was launched.
+
+### Agent Prompt — Code Tasks
+```
+You are working on ADO work item #<ID>: <TITLE>
+
+## Context
+<Full description from ADO>
+<Related/batch context if any>
+
+## Repository
+Working in: <repo path>
+Branch: {{ .ado.branchPrefix }}<id>-<slug>
+Base: main (or master — check git)
+
+## Instructions
+1. Read the repo's CLAUDE.md for build/test/lint commands
+2. Understand the codebase area relevant to this bug/task
+3. Implement the fix/feature
+4. Run lint and tests — fix any failures
+5. Commit with: "AB#<ID>: <description>"
+6. Push branch and open a DRAFT PR targeting main
+7. Post an ADO comment on the work item with: summary of changes, PR link, open questions
+8. Update ADO work item state to Active if currently Proposed
+
+## Safety
+- ONLY modify files related to this work item
+- ONLY push to branch: {{ .ado.branchPrefix }}<id>-<slug>
+- ONLY open DRAFT PRs — never publish or merge
+- If blocked or uncertain, stop and document findings
+```
+
+### Agent Prompt — Investigation Tasks
+```
+You are investigating ADO work item #<ID>: <TITLE>
+
+## Context
+<Full description from ADO>
+
+## Instructions
+1. Research the issue in the codebase at <repo path>
+2. Identify root cause, relevant files, potential fix approach
+3. Post findings as an ADO comment: root cause, affected files, recommended fix, complexity estimate
+4. Do NOT make code changes, create branches, or open PRs
+```
+
+---
+
+## Command: status
+
+Check in-flight agents, update state, report progress.
+
+1. Read state file
+2. Check in-session tasks via TaskList:
+   - Completed → update state to `done`, append Agent Log
+   - Still running → report as in-progress
+   - Missing (session restart) → check for branch in repo (`git branch -r`); if found with commits → `done-needs-review`, else → `blocked` ("agent session lost")
+3. Refresh ADO state for in-progress/done items via batch fetch
+4. Check for PRs on branches without a PR recorded
+5. Write updated state file
+6. Report: in-progress, completed, blocked, needs-human-attention
+
+---
 
 ## Safety Rules
 - NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
@@ -28,6 +171,7 @@ When starting a session, always read ~/cockpit/state/ado-tasks.md for current ta
 - Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
 - Only open DRAFT PRs — never publish or merge
 - Never modify the user's current working tree or checked-out branch
+- State file (~/cockpit/state/ado-tasks.md) is the ONLY mutable file the cockpit session writes to (besides agent worktrees)
 
 ## Task Prioritization
 1. Active items before Proposed
