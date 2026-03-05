@@ -61,7 +61,16 @@ if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne '
     Write-Host 'Windows ssh-agent already disabled or not found.'
 }
 
-# --- 5. Bitwarden login ---
+# --- 5. Install Claude Code ---
+
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    Write-Host 'Claude Code is already installed.'
+} else {
+    Write-Host 'Installing Claude Code ...'
+    Invoke-RestMethod https://claude.ai/install.ps1 | Invoke-Expression
+}
+
+# --- 6. Bitwarden login ---
 
 Write-Host 'Checking Bitwarden status ...'
 $bwStatus = bw status 2>$null | ConvertFrom-Json

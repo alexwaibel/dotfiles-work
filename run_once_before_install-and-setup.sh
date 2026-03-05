@@ -55,7 +55,16 @@ echo "Adding Azure DevOps CLI extension ..."
 az extension add --name azure-devops --yes 2>/dev/null || true
 echo "azure-devops extension ready."
 
-# --- 6. Bitwarden login ---
+# --- 6. Install Claude Code ---
+
+if command -v claude &>/dev/null; then
+    echo "Claude Code is already installed."
+else
+    echo "Installing Claude Code ..."
+    curl -fsSL https://claude.ai/install.sh | bash
+fi
+
+# --- 7. Bitwarden login ---
 
 echo "Checking Bitwarden status ..."
 bw_status=$(bw status 2>/dev/null | jq -r '.status' || echo "not-installed")
