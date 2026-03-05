@@ -43,8 +43,12 @@ if ($nvmHome) {
 $nvmNode = nvm list 2>$null | Select-String '\*'
 if (-not $nvmNode) {
     Write-Host 'Installing Node.js LTS via nvm ...'
-    nvm install lts
-    nvm use lts
+    $nvmOutput = nvm install lts 2>&1 | Out-String
+    Write-Host $nvmOutput
+    # nvm-windows doesn't resolve 'lts' alias in 'nvm use' — extract the installed version
+    if ($nvmOutput -match 'v(\d+\.\d+\.\d+)') {
+        nvm use $Matches[1]
+    }
 } else {
     Write-Host "Node.js already installed: $($nvmNode.Line.Trim())"
 }
