@@ -80,7 +80,7 @@ You should see: `Hi <username>! You've successfully authenticated...`
 ### 4. Clone dotfiles and apply
 
 ```bash
-chezmoi init --apply alwaibel_microsoft/dotfiles
+chezmoi init --apply alexwaibel/dotfiles-work
 ```
 
 This single command will:
