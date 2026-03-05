@@ -37,18 +37,18 @@
      Paths cover repos from chezmoi config plus the worktree staging area. */}}
 {{- $home := .chezmoi.homeDir -}}
 {{- range .ado.repos }}
-      "Read(file_path:{{ $home }}/{{ .name }}/*)",
-      "Edit(file_path:{{ $home }}/{{ .name }}/*)",
-      "Write(file_path:{{ $home }}/{{ .name }}/*)",
-      "Grep(path:{{ $home }}/{{ .name }}/*)",
+      "Read({{ $home }}/{{ .name }}/**)",
+      "Edit({{ $home }}/{{ .name }}/**)",
+      "Write({{ $home }}/{{ .name }}/**)",
+      "Grep({{ $home }}/{{ .name }}/**)",
 {{- end }}
-      "Read(file_path:{{ $home }}/.claude/worktrees/*)",
-      "Edit(file_path:{{ $home }}/.claude/worktrees/*)",
-      "Write(file_path:{{ $home }}/.claude/worktrees/*)",
-      "Grep(path:{{ $home }}/.claude/worktrees/*)",
+      "Read({{ $home }}/.claude/worktrees/**)",
+      "Edit({{ $home }}/.claude/worktrees/**)",
+      "Write({{ $home }}/.claude/worktrees/**)",
+      "Grep({{ $home }}/.claude/worktrees/**)",
 {{/* Cockpit state file: local markdown tracking agent status per sprint. */}}
-      "Edit(file_path:{{ $home }}/cockpit/state/ado-tasks.md)",
-      "Write(file_path:{{ $home }}/cockpit/state/ado-tasks.md)",
+      "Edit({{ $home }}/cockpit/state/ado-tasks.md)",
+      "Write({{ $home }}/cockpit/state/ado-tasks.md)",
 {{/* ADO MCP read-only: sprint/iteration queries, backlog views, work item reads */}}
       "mcp__azure-devops__work_list_team_iterations",
       "mcp__azure-devops__work_list_iterations",
