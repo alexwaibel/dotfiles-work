@@ -77,11 +77,19 @@ if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne '
 
 # --- 5. Install Claude Code ---
 
+$claudeBin = "$env:USERPROFILE\.local\bin"
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     Write-Host 'Claude Code is already installed.'
 } else {
     Write-Host 'Installing Claude Code ...'
     Invoke-RestMethod https://claude.ai/install.ps1 | Invoke-Expression
+    # Add to persistent user PATH if not already there
+    $userPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath -notlike "*$claudeBin*") {
+        [System.Environment]::SetEnvironmentVariable('Path', "$userPath;$claudeBin", 'User')
+        Write-Host "Added $claudeBin to user PATH."
+    }
+    $env:Path = "$claudeBin;$env:Path"
 }
 
 # --- 6. Bitwarden login ---
