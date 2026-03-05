@@ -30,10 +30,14 @@ $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';
 
 # --- 2. Install Node.js LTS via nvm ---
 
-# nvm-windows may not be on PATH yet even after refresh — add its known location
-$nvmHome = "$env:LOCALAPPDATA\nvm"
-if ((Test-Path $nvmHome) -and ($env:Path -notlike "*$nvmHome*")) {
-    $env:Path = "$nvmHome;$env:Path"
+# nvm-windows may not be on PATH yet even after refresh — load its env vars from the registry
+$nvmHome = [System.Environment]::GetEnvironmentVariable('NVM_HOME', 'User')
+$nvmSymlink = [System.Environment]::GetEnvironmentVariable('NVM_SYMLINK', 'User')
+if ($nvmHome) {
+    $env:NVM_HOME = $nvmHome
+    $env:NVM_SYMLINK = $nvmSymlink
+    if ($env:Path -notlike "*$nvmHome*") { $env:Path = "$nvmHome;$env:Path" }
+    if ($nvmSymlink -and ($env:Path -notlike "*$nvmSymlink*")) { $env:Path = "$nvmSymlink;$env:Path" }
 }
 
 $nvmNode = nvm list 2>$null | Select-String '\*'
