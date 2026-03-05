@@ -10,6 +10,7 @@ $packages = @(
     'Bitwarden.Bitwarden'
     'Bitwarden.CLI'
     'Microsoft.AzureCLI'
+    'CoreyButler.NVMforWindows'
 )
 
 foreach ($pkg in $packages) {
@@ -27,13 +28,24 @@ foreach ($pkg in $packages) {
 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
             [System.Environment]::GetEnvironmentVariable('Path', 'User')
 
-# --- 2. Install az devops extension ---
+# --- 2. Install Node.js LTS via nvm ---
+
+$nvmNode = nvm list 2>$null | Select-String '\*'
+if (-not $nvmNode) {
+    Write-Host 'Installing Node.js LTS via nvm ...'
+    nvm install lts
+    nvm use lts
+} else {
+    Write-Host "Node.js already installed: $($nvmNode.Line.Trim())"
+}
+
+# --- 3. Install az devops extension ---
 
 Write-Host 'Adding Azure DevOps CLI extension ...'
 az extension add --name azure-devops --yes 2>$null
 Write-Host 'azure-devops extension ready.'
 
-# --- 3. Disable Windows OpenSSH agent (Bitwarden SSH agent replaces it) ---
+# --- 4. Disable Windows OpenSSH agent (Bitwarden SSH agent replaces it) ---
 
 $sshAgent = Get-Service -Name ssh-agent -ErrorAction SilentlyContinue
 if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne 'Disabled')) {
@@ -49,7 +61,7 @@ if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne '
     Write-Host 'Windows ssh-agent already disabled or not found.'
 }
 
-# --- 4. Bitwarden login ---
+# --- 5. Bitwarden login ---
 
 Write-Host 'Checking Bitwarden status ...'
 $bwStatus = bw status 2>$null | ConvertFrom-Json

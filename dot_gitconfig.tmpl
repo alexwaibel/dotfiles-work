@@ -8,11 +8,17 @@
 
 [core]
 	autocrlf = false
+{{- if eq .chezmoi.os "windows" }}
 	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
+{{- end }}
 
 [credential]
 	azreposCredentialType = oauth
 	msauthUseBroker = true
 	msauthUseDefaultAccount = true
+{{- if eq .chezmoi.os "windows" }}
 	helper = manager
+{{- else }}
+	helper = /mnt/c/Program\ Files/Git/mingw64/bin/git-credential-manager.exe
+{{- end }}
 
