@@ -97,7 +97,9 @@ if ($bwStatus.status -eq 'unauthenticated') {
 }
 
 if ($bwStatus.status -eq 'locked') {
-    Write-Host 'Bitwarden vault is locked — chezmoi will prompt you to unlock when it renders templates.'
+    Write-Host 'Unlocking Bitwarden vault ...'
+    $env:BW_SESSION = (bw unlock --raw)
+    if ($LASTEXITCODE -ne 0) { throw 'Bitwarden unlock failed.' }
 }
 
 Write-Host 'Bootstrap complete.'

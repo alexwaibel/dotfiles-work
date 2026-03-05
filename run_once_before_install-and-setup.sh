@@ -75,7 +75,9 @@ if [ "$bw_status" = "unauthenticated" ]; then
 fi
 
 if [ "$bw_status" = "locked" ]; then
-    echo "Bitwarden vault is locked — chezmoi will prompt you to unlock when it renders templates."
+    echo "Unlocking Bitwarden vault ..."
+    BW_SESSION=$(bw unlock --raw)
+    export BW_SESSION
 fi
 
 echo "Bootstrap complete."
