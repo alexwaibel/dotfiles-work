@@ -2,6 +2,19 @@
 {
   "model": "opus",
   "reasoningEffort": "medium",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/guard-git-push.sh"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
 {{/* Read-only shell: git and filesystem inspection, no side effects */}}
@@ -20,15 +33,22 @@
       "Bash(chezmoi diff:*)",
       "Bash(chezmoi data:*)",
       "Bash(chezmoi managed:*)",
-{{/* Git write operations: the minimum needed for code agents to create branches, commit, and push */}}
-      "Bash(git checkout:*)",
-      "Bash(git switch:*)",
+{{/* Git write operations: push is guarded by the PreToolUse hook (guard-git-push.sh) which enforces alwaibel/claude/* branch prefix. */}}
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git fetch:*)",
-{{/* Build tools: agents run lint and tests to verify changes */}}
-      "Bash(yarn:*)",
+{{/* Build tools: scoped to safe local commands. Dev servers (yarn dev/start/staging) require prompting. */}}
+      "Bash(yarn install:*)",
+      "Bash(yarn build:*)",
+      "Bash(yarn lint:*)",
+      "Bash(yarn test:*)",
+      "Bash(yarn codegen:*)",
+      "Bash(yarn relay:*)",
+      "Bash(yarn setup:*)",
+      "Bash(yarn predev:*)",
+      "Bash(yarn tsc:*)",
+      "Bash(yarn stats:*)",
 {{/* Azure CLI: Teams channel notifications scoped to our team, and ADO draft PR creation */}}
       "Bash(az rest --method POST --url \"https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}:*)",
       "Bash(az repos pr create:*)",
