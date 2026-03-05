@@ -1,0 +1,48 @@
+{{- /* Claude Code settings — rendered by chezmoi, comments stripped in output */ -}}
+{
+  "model": "opus",
+  "reasoningEffort": "medium",
+  "permissions": {
+    "allow": [
+{{/* Read-only shell: git and filesystem inspection, no side effects */}}
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+{{/* Read-only shell: chezmoi inspection queries against dotfiles state */}}
+      "Bash(chezmoi status:*)",
+      "Bash(chezmoi diff:*)",
+      "Bash(chezmoi data:*)",
+      "Bash(chezmoi managed:*)",
+{{/* ADO MCP read-only: sprint/iteration queries, backlog views, work item reads */}}
+      "mcp__azure-devops__work_list_team_iterations",
+      "mcp__azure-devops__work_list_iterations",
+      "mcp__azure-devops__work_get_team_capacity",
+      "mcp__azure-devops__work_get_iteration_capacities",
+      "mcp__azure-devops__wit_list_backlogs",
+      "mcp__azure-devops__wit_list_backlog_work_items",
+      "mcp__azure-devops__wit_my_work_items",
+      "mcp__azure-devops__wit_get_work_items_batch_by_ids",
+      "mcp__azure-devops__wit_get_work_item",
+      "mcp__azure-devops__wit_list_work_item_comments",
+      "mcp__azure-devops__wit_list_work_item_revisions",
+      "mcp__azure-devops__wit_get_work_items_for_iteration",
+      "mcp__azure-devops__wit_get_work_item_type",
+      "mcp__azure-devops__wit_get_query",
+      "mcp__azure-devops__wit_get_query_results_by_id",
+{{/* ADO MCP write: field updates and comments. Safe — ADO tracks full revision history so any change can be viewed and reverted in ADO UI. */}}
+      "mcp__azure-devops__wit_update_work_item",
+      "mcp__azure-devops__wit_update_work_items_batch",
+      "mcp__azure-devops__wit_add_work_item_comment",
+{{/* Cockpit state file: local markdown tracking agent status per sprint. Not in git; only the main cockpit session writes it. */}}
+      "Edit(file_path:~/cockpit/state/ado-tasks.md)",
+      "Write(file_path:~/cockpit/state/ado-tasks.md)"
+    ]
+  }
+}

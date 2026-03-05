@@ -9,7 +9,7 @@ Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io
 | Target File | chezmoi Source | Type |
 |---|---|---|
 | `~/.claude/config.json` | `dot_claude/config.json.tmpl` | Template — API key from Bitwarden |
-| `~/.claude/settings.json` | `dot_claude/settings.json` | Plain file — model preference |
+| `~/.claude/settings.json` | `dot_claude/settings.json.tmpl` | Template — model preference & auto-approved permissions |
 | `~/.claude/CLAUDE.md` | `dot_claude/CLAUDE.md` | Plain file — global Claude Code instructions |
 | `~/.claude.json` | `modify_dot_claude.json.ps1.tmpl` | Modify script — merges ADO MCP server config into existing file |
 | `~/.gitconfig` | `dot_gitconfig.tmpl` | Template — git identity & credentials |
