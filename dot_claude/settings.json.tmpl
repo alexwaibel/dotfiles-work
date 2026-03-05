@@ -20,6 +20,34 @@
       "Bash(chezmoi diff:*)",
       "Bash(chezmoi data:*)",
       "Bash(chezmoi managed:*)",
+{{/* Git write operations: the minimum needed for code agents to create branches, commit, and push */}}
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+{{/* Build tools: agents run lint and tests to verify changes */}}
+      "Bash(yarn:*)",
+{{/* Azure CLI: Teams channel notifications scoped to our team, and ADO draft PR creation */}}
+      "Bash(az rest --method POST --url \"https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}:*)",
+      "Bash(az repos pr create:*)",
+{{/* File tools scoped to project directories and agent worktrees.
+     Background agents cannot prompt for permission so these must be pre-approved.
+     Paths cover repos from chezmoi config plus the worktree staging area. */}}
+{{- range .ado.repos }}
+      "Read(file_path:{{ .path }}/*)",
+      "Edit(file_path:{{ .path }}/*)",
+      "Write(file_path:{{ .path }}/*)",
+      "Grep(path:{{ .path }}/*)",
+{{- end }}
+      "Read(file_path:~/.claude/worktrees/*)",
+      "Edit(file_path:~/.claude/worktrees/*)",
+      "Write(file_path:~/.claude/worktrees/*)",
+      "Grep(path:~/.claude/worktrees/*)",
+{{/* Cockpit state file: local markdown tracking agent status per sprint. */}}
+      "Edit(file_path:~/cockpit/state/ado-tasks.md)",
+      "Write(file_path:~/cockpit/state/ado-tasks.md)",
 {{/* ADO MCP read-only: sprint/iteration queries, backlog views, work item reads */}}
       "mcp__azure-devops__work_list_team_iterations",
       "mcp__azure-devops__work_list_iterations",
@@ -39,10 +67,7 @@
 {{/* ADO MCP write: field updates and comments. Safe — ADO tracks full revision history so any change can be viewed and reverted in ADO UI. */}}
       "mcp__azure-devops__wit_update_work_item",
       "mcp__azure-devops__wit_update_work_items_batch",
-      "mcp__azure-devops__wit_add_work_item_comment",
-{{/* Cockpit state file: local markdown tracking agent status per sprint. Not in git; only the main cockpit session writes it. */}}
-      "Edit(file_path:~/cockpit/state/ado-tasks.md)",
-      "Write(file_path:~/cockpit/state/ado-tasks.md)"
+      "mcp__azure-devops__wit_add_work_item_comment"
     ]
   }
 }
