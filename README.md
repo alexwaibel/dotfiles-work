@@ -40,7 +40,18 @@ This will:
 - Prompt for Bitwarden login (if not already authenticated)
 - Render templates with secrets from Bitwarden and apply to home directory
 
-### 3. Set up Bitwarden SSH agent
+### 3. Set up WSL
+
+The Windows bootstrap installs WSL and Ubuntu, but first launch requires interactive user setup:
+
+1. Open **Ubuntu** from the Start menu and create your Unix user account
+2. Install chezmoi and apply dotfiles inside WSL:
+   ```bash
+   sh -c "$(curl -fsLS get.chezmoi.io)"
+   chezmoi init --apply alexwaibel/dotfiles-work
+   ```
+
+### 4. Set up Bitwarden SSH agent
 
 The Bitwarden SSH agent serves keys directly from the vault — the private key never touches disk.
 
@@ -48,7 +59,7 @@ The Bitwarden SSH agent serves keys directly from the vault — the private key 
 2. Add the public key from your **GitHub SSH Key** vault entry to https://github.com/settings/ssh/new
 3. Verify: `ssh -T git@github.com`
 
-### 4. Verify
+### 5. Verify
 
 ```bash
 chezmoi doctor
