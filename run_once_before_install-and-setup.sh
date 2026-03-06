@@ -80,4 +80,18 @@ if [ "$bw_status" = "locked" ]; then
     export BW_SESSION
 fi
 
+# --- 8. Extract SSH public key and switch chezmoi repo to SSH remote ---
+
+mkdir -p "$HOME/.ssh"
+pubkey=$(ssh-add -L 2>/dev/null | grep alexwaibelmsft)
+if [ -n "$pubkey" ]; then
+    echo "$pubkey" > "$HOME/.ssh/alexwaibelmsft.pub"
+    echo "Extracted alexwaibelmsft public key to ~/.ssh/alexwaibelmsft.pub"
+else
+    echo "WARNING: Could not find alexwaibelmsft key in SSH agent — make sure Bitwarden SSH agent is running."
+fi
+
+git -C "$HOME/.local/share/chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
+echo "Chezmoi remote switched to SSH."
+
 echo "Bootstrap complete."

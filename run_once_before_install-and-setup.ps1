@@ -117,7 +117,23 @@ if ($bwStatus.status -eq 'locked') {
     if ($LASTEXITCODE -ne 0) { throw 'Bitwarden unlock failed.' }
 }
 
-# --- 8. Windows preferences (not synced by Microsoft account) ---
+# --- 8. Extract SSH public key and switch chezmoi repo to SSH remote ---
+
+$sshDir = "$env:USERPROFILE\.ssh"
+if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+
+$pubKey = ssh-add -L 2>$null | Select-String 'alexwaibelmsft'
+if ($pubKey) {
+    $pubKey.Line | Out-File -Encoding utf8 -FilePath "$sshDir\alexwaibelmsft.pub"
+    Write-Host 'Extracted alexwaibelmsft public key to ~/.ssh/alexwaibelmsft.pub'
+} else {
+    Write-Warning 'Could not find alexwaibelmsft key in SSH agent — make sure Bitwarden SSH agent is running.'
+}
+
+git -C "$env:USERPROFILE\.local\share\chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
+Write-Host 'Chezmoi remote switched to SSH.'
+
+# --- 9. Windows preferences (not synced by Microsoft account) ---
 
 $themePath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 Set-ItemProperty -Path $themePath -Name AppsUseLightTheme -Value 0

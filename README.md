@@ -38,6 +38,8 @@ This will:
   - **Windows**: Bitwarden (desktop + CLI), Azure CLI, nvm-windows, Node.js LTS, WSL with Ubuntu, Claude Code — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
   - **Linux/WSL**: curl, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, Claude Code — via apt + native installers.
 - Prompt for Bitwarden login (if not already authenticated)
+- Extract the `alexwaibelmsft` SSH public key from the agent and configure `~/.ssh/config` so Git uses the correct key for GitHub
+- Switch the chezmoi repo remote from HTTPS to SSH
 - Render templates with secrets from Bitwarden and apply to home directory
 
 ### 3. Set up WSL
@@ -53,10 +55,10 @@ The Windows bootstrap installs WSL and Ubuntu, but first launch requires interac
 
 ### 4. Set up Bitwarden SSH agent
 
-The Bitwarden SSH agent serves keys directly from the vault — the private key never touches disk.
+The Bitwarden SSH agent serves keys directly from the vault — the private key never touches disk. The bootstrap script automatically extracts the correct public key and configures `~/.ssh/config`, but the agent itself must be enabled manually:
 
 1. Open the Bitwarden desktop app → **Settings → SSH Agent** → enable
-2. Add the public key from your **GitHub SSH Key** vault entry to https://github.com/settings/ssh/new
+2. Add the public keys from your GitHub SSH Key vault entries to https://github.com/settings/ssh/new
 3. Verify: `ssh -T git@github.com`
 
 ### 5. Verify
