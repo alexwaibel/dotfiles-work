@@ -101,6 +101,7 @@ fi
 pubkey=$(ssh-add -L 2>/dev/null | grep alexwaibelmsft || true)
 if [ -n "$pubkey" ]; then
     echo "$pubkey" > "$HOME/.ssh/alexwaibelmsft.pub"
+    chmod 600 "$HOME/.ssh/alexwaibelmsft.pub"
     echo "Extracted alexwaibelmsft public key to ~/.ssh/alexwaibelmsft.pub"
     git -C "$HOME/.local/share/chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
     echo "Chezmoi remote switched to SSH."
