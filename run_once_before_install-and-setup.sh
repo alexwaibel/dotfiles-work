@@ -7,7 +7,7 @@ set -euo pipefail
 # --- 1. Install apt packages ---
 
 sudo apt-get update -qq
-sudo apt-get install -y -qq curl jq unzip
+sudo apt-get install -y -qq curl jq unzip socat
 
 # --- 2. Install nvm and Node.js LTS ---
 
@@ -80,18 +80,32 @@ if [ "$bw_status" = "locked" ]; then
     export BW_SESSION
 fi
 
-# --- 8. Extract SSH public key and switch chezmoi repo to SSH remote ---
+# --- 8. Set up SSH agent bridge from Windows and configure SSH ---
 
 mkdir -p "$HOME/.ssh"
-pubkey=$(ssh-add -L 2>/dev/null | grep alexwaibelmsft)
+
+# Source the agent bridge to make Bitwarden SSH agent available in this session
+if [ -f "$HOME/.ssh/agent-bridge.sh" ]; then
+    # shellcheck source=/dev/null
+    . "$HOME/.ssh/agent-bridge.sh"
+    echo "SSH agent bridge started."
+fi
+
+# Add sourcing to .bashrc if not already present
+if ! grep -q 'agent-bridge.sh' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'source "$HOME/.ssh/agent-bridge.sh"' >> "$HOME/.bashrc"
+    echo "Added SSH agent bridge to .bashrc."
+fi
+
+# Extract public key now that the agent is available
+pubkey=$(ssh-add -L 2>/dev/null | grep alexwaibelmsft || true)
 if [ -n "$pubkey" ]; then
     echo "$pubkey" > "$HOME/.ssh/alexwaibelmsft.pub"
     echo "Extracted alexwaibelmsft public key to ~/.ssh/alexwaibelmsft.pub"
+    git -C "$HOME/.local/share/chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
+    echo "Chezmoi remote switched to SSH."
 else
     echo "WARNING: Could not find alexwaibelmsft key in SSH agent — make sure Bitwarden SSH agent is running."
 fi
-
-git -C "$HOME/.local/share/chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
-echo "Chezmoi remote switched to SSH."
 
 echo "Bootstrap complete."

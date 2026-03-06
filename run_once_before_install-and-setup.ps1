@@ -11,6 +11,7 @@ $packages = @(
     'Bitwarden.CLI'
     'Microsoft.AzureCLI'
     'CoreyButler.NVMforWindows'
+    'jstarks.npiperelay'
 )
 
 foreach ($pkg in $packages) {
