@@ -35,7 +35,7 @@ chezmoi init --apply alexwaibel/dotfiles-work
 This will:
 - Prompt for your corporate email, Azure AD tenant ID, and ADO config (stored locally, only asked once)
 - Run the platform-specific bootstrap script which installs:
-  - **Windows**: Bitwarden (desktop + CLI), Azure CLI, nvm-windows, Node.js LTS, Claude Code — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
+  - **Windows**: Bitwarden (desktop + CLI), Azure CLI, nvm-windows, Node.js LTS, WSL with Ubuntu, Claude Code — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
   - **Linux/WSL**: curl, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, Claude Code — via apt + native installers.
 - Prompt for Bitwarden login (if not already authenticated)
 - Render templates with secrets from Bitwarden and apply to home directory

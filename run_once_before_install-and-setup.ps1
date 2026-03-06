@@ -75,7 +75,14 @@ if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne '
     Write-Host 'Windows ssh-agent already disabled or not found.'
 }
 
-# --- 5. Install Claude Code ---
+# --- 5. Install WSL ---
+
+Write-Host 'Setting up WSL ...'
+Write-Host '  Requesting elevated permissions (UAC prompt) ...'
+$proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command', 'wsl --install --no-launch; wsl --update; wsl --install -d Ubuntu --no-launch' -Wait -PassThru
+Write-Host 'WSL with Ubuntu ready.'
+
+# --- 6. Install Claude Code ---
 
 $claudeBin = "$env:USERPROFILE\.local\bin"
 if (Get-Command claude -ErrorAction SilentlyContinue) {
@@ -92,7 +99,7 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
     $env:Path = "$claudeBin;$env:Path"
 }
 
-# --- 6. Bitwarden login ---
+# --- 7. Bitwarden login ---
 
 Write-Host 'Checking Bitwarden status ...'
 $bwStatus = bw status 2>$null | ConvertFrom-Json
@@ -110,7 +117,7 @@ if ($bwStatus.status -eq 'locked') {
     if ($LASTEXITCODE -ne 0) { throw 'Bitwarden unlock failed.' }
 }
 
-# --- 7. Windows preferences (not synced by Microsoft account) ---
+# --- 8. Windows preferences (not synced by Microsoft account) ---
 
 $themePath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 Set-ItemProperty -Path $themePath -Name AppsUseLightTheme -Value 0
