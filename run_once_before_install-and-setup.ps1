@@ -110,4 +110,24 @@ if ($bwStatus.status -eq 'locked') {
     if ($LASTEXITCODE -ne 0) { throw 'Bitwarden unlock failed.' }
 }
 
+# --- 7. Windows preferences (not synced by Microsoft account) ---
+
+$themePath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+Set-ItemProperty -Path $themePath -Name AppsUseLightTheme -Value 0
+Set-ItemProperty -Path $themePath -Name SystemUsesLightTheme -Value 0
+Write-Host 'Windows dark theme enabled.'
+
+$explorerPath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+Set-ItemProperty -Path $explorerPath -Name Hidden -Value 1
+Set-ItemProperty -Path $explorerPath -Name HideFileExt -Value 0
+Write-Host 'File Explorer: show hidden items and file extensions enabled.'
+
+Set-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search' -Name SearchboxTaskbarMode -Value 0
+Write-Host 'Taskbar search bar hidden.'
+
+
+$shell = New-Object -ComObject Shell.Application
+$shell.Namespace($env:USERPROFILE).Self.InvokeVerb('pintohome')
+Write-Host "Pinned $env:USERPROFILE to File Explorer sidebar."
+
 Write-Host 'Bootstrap complete.'
