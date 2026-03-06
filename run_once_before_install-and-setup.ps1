@@ -12,6 +12,7 @@ $packages = @(
     'Microsoft.AzureCLI'
     'CoreyButler.NVMforWindows'
     'jstarks.npiperelay'
+    'jqlang.jq'
 )
 
 foreach ($pkg in $packages) {

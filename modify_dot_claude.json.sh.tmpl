@@ -1,0 +1,15 @@
+#!/bin/bash
+# chezmoi:template:left-delimiter="{{" right-delimiter="}}"
+# Merge mcpServers into existing .claude.json without overwriting runtime state
+
+stdin=$(cat)
+
+if [ -z "$stdin" ] || [ "$(echo "$stdin" | tr -d '[:space:]')" = "" ]; then
+    stdin='{}'
+fi
+
+managed_servers='{"azure-devops":{"command":{{- if eq .chezmoi.os "windows" }}"cmd","args":["/c","npx"{{- else }}"npx","args":[{{- end }},"-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]}}'
+
+echo "$stdin" | jq --argjson managed "$managed_servers" '
+  .mcpServers = ($managed * (.mcpServers // {}))
+'

@@ -2,9 +2,9 @@ cockpit/state/ado-tasks.md
 
 {{ if ne .chezmoi.os "windows" }}
 install-and-setup.ps1
-.ssh/agent-bridge.sh
 {{ end }}
 
 {{ if ne .chezmoi.os "linux" }}
 install-and-setup.sh
+.ssh/agent-bridge.sh
 {{ end }}
