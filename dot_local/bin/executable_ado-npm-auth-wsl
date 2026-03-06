@@ -1,0 +1,5 @@
+#!/bin/bash
+# Runs ado-npm-auth via Windows PowerShell to satisfy Conditional Access.
+# Usage: ado-npm-auth-wsl [path-to-npmrc]
+# Defaults to .npmrc in the current directory.
+powershell.exe -Command "ado-npm-auth -c '$(wslpath -w "${1:-.npmrc}")'"

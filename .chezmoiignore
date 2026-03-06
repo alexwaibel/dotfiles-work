@@ -7,4 +7,5 @@ install-and-setup.ps1
 {{ if ne .chezmoi.os "linux" }}
 install-and-setup.sh
 .ssh/agent-bridge.sh
+.local/bin/ado-npm-auth-wsl
 {{ end }}
