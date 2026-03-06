@@ -25,9 +25,11 @@
     teamId = "{{ promptStringOnce $teams "teamId" "Teams team ID for agent notifications (from Graph API)" }}"
     channelId = "{{ promptStringOnce $teams "channelId" "Teams channel ID for agent notifications (from Graph API)" }}"
 
-{{- if eq .chezmoi.os "windows" }}
 [interpreters.sh]
+{{- if eq .chezmoi.os "windows" }}
     command = 'C:\Program Files\Git\bin\bash.exe'
+{{- else }}
+    command = "bash"
 {{- end }}
 
 [bitwarden]
