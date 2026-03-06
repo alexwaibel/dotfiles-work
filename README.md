@@ -28,9 +28,21 @@ sh -c "$(curl -fsLS get.chezmoi.io)"
 
 ### 2. Clone dotfiles and apply
 
-```bash
+To avoid multiple Bitwarden prompts, log in and export the session first:
+
+**Windows (PowerShell):**
+```powershell
+$env:BW_SESSION = (bw login --raw)
 chezmoi init --apply alexwaibel/dotfiles-work
 ```
+
+**WSL/Linux:**
+```bash
+export BW_SESSION=$(bw login --raw)
+chezmoi init --apply alexwaibel/dotfiles-work
+```
+
+If you're already logged in but locked, use `bw unlock --raw` instead of `bw login --raw`.
 
 This will:
 - Prompt for your corporate email, Azure AD tenant ID, and ADO config (stored locally, only asked once)
