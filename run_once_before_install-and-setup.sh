@@ -108,4 +108,14 @@ else
     echo "WARNING: Could not find alexwaibelmsft key in SSH agent — make sure Bitwarden SSH agent is running."
 fi
 
+# --- 9. Symlink Windows .npmrc so WSL uses the same ADO feed tokens ---
+
+win_npmrc="/mnt/c/Users/$(whoami)/.npmrc"
+if [ -f "$win_npmrc" ]; then
+    ln -sf "$win_npmrc" "$HOME/.npmrc"
+    echo "Symlinked ~/.npmrc to Windows .npmrc."
+else
+    echo "WARNING: Windows .npmrc not found at $win_npmrc — run ado-npm-auth on Windows first."
+fi
+
 echo "Bootstrap complete."
