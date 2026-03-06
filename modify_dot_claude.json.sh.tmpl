@@ -8,7 +8,11 @@ if [ -z "$stdin" ] || [ "$(echo "$stdin" | tr -d '[:space:]')" = "" ]; then
     stdin='{}'
 fi
 
-managed_servers='{"azure-devops":{"command":{{- if eq .chezmoi.os "windows" }}"cmd","args":["/c","npx"{{- else }}"npx","args":[{{- end }},"-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]}}'
+{{ if eq .chezmoi.os "windows" -}}
+managed_servers='{"azure-devops":{"command":"cmd","args":["/c","npx","-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]}}'
+{{ else -}}
+managed_servers='{"azure-devops":{"command":"npx","args":["-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]}}'
+{{ end -}}
 
 echo "$stdin" | jq --argjson managed "$managed_servers" '
   .mcpServers = ($managed * (.mcpServers // {}))
