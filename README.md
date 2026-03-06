@@ -18,7 +18,7 @@ Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io
 
 **Windows (PowerShell):**
 ```powershell
-winget install twpayne.chezmoi
+winget install twpayne.chezmoi --accept-source-agreements --accept-package-agreements
 ```
 
 **WSL/Linux:**
