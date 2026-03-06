@@ -26,15 +26,7 @@ winget install twpayne.chezmoi --accept-source-agreements --accept-package-agree
 sh -c "$(curl -fsLS get.chezmoi.io)"
 ```
 
-### 2. Set up Bitwarden SSH agent
-
-The Bitwarden SSH agent serves keys directly from the vault — the private key never touches disk.
-
-1. Open the Bitwarden desktop app → **Settings → SSH Agent** → enable
-2. Add the public key from your **GitHub SSH Key** vault entry to https://github.com/settings/ssh/new
-3. Verify: `ssh -T git@github.com`
-
-### 3. Clone dotfiles and apply
+### 2. Clone dotfiles and apply
 
 ```bash
 chezmoi init --apply alexwaibel/dotfiles-work
@@ -47,6 +39,14 @@ This will:
   - **Linux/WSL**: curl, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, Claude Code — via apt + native installers.
 - Prompt for Bitwarden login (if not already authenticated)
 - Render templates with secrets from Bitwarden and apply to home directory
+
+### 3. Set up Bitwarden SSH agent
+
+The Bitwarden SSH agent serves keys directly from the vault — the private key never touches disk.
+
+1. Open the Bitwarden desktop app → **Settings → SSH Agent** → enable
+2. Add the public key from your **GitHub SSH Key** vault entry to https://github.com/settings/ssh/new
+3. Verify: `ssh -T git@github.com`
 
 ### 4. Verify
 
