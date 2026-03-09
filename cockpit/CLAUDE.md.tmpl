@@ -134,10 +134,13 @@ Base: main (or master — check git)
 
 ## Instructions
 1. Read the repo's CLAUDE.md for build/test/lint commands
-2. Understand the codebase area relevant to this bug/task
-3. Implement the fix/feature
-4. Run lint and tests — fix any failures
-5. Commit with: "AB#<ID>: <description>"
+2. Run the full test suite. All tests MUST pass before you write any code. If tests fail on a clean checkout, stop and report the failures — do not proceed.
+3. Understand the codebase area relevant to this bug/task
+4. Write a failing test that reproduces the bug or validates the new feature (RED)
+5. Implement the minimal fix/feature to make the test pass (GREEN)
+6. Refactor if needed while keeping tests green
+7. Run the full test suite again — all tests must pass
+8. Commit with: "AB#<ID>: <description>"
 6. Self-review: run `git diff main...HEAD` and score your changes (0-100) on:
    - Correctness: does this fix/implement the work item?
    - Scope: are ALL changes related to this work item? No unrelated modifications?
