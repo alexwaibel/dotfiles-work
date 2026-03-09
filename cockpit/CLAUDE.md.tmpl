@@ -158,6 +158,10 @@ az rest --method POST \
   --headers "Content-Type=application/json" \
   --body '{"body":{"contentType":"html","content":"<b>[WI#<ID>]</b> <status message>"}}'
 
+## Shell Commands
+- Your working directory is already set to the repo/worktree — do NOT use `cd`. Run git/yarn commands directly (e.g. `git status`, `yarn lint`).
+- NEVER chain commands with `&&` or `;` — run each as a separate Bash call.
+
 ## Safety
 - ONLY modify files related to this work item
 - ONLY push to branch: {{ .ado.branchPrefix }}<id>-<slug>
