@@ -138,9 +138,15 @@ Base: main (or master — check git)
 3. Implement the fix/feature
 4. Run lint and tests — fix any failures
 5. Commit with: "AB#<ID>: <description>"
-6. Push branch and open a DRAFT PR targeting main
-7. Post an ADO comment on the work item with: summary of changes, PR link, open questions
-8. Update ADO work item state to Active if currently Proposed
+6. Self-review: run `git diff main...HEAD` and score your changes (0-100) on:
+   - Correctness: does this fix/implement the work item?
+   - Scope: are ALL changes related to this work item? No unrelated modifications?
+   - Tests: are existing tests passing? Are new tests needed and present?
+   - Style: does the code match the repo's conventions?
+   If score < 80, fix issues before proceeding. Note the score in your PR description.
+7. Push branch and open a DRAFT PR targeting main
+8. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
+9. Update ADO work item state to Active if currently Proposed
 
 ## Notifications
 Post to Teams when: starting work, opening a PR, blocked/need help, or done.
