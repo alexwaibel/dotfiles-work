@@ -84,7 +84,22 @@ Write-Host '  Requesting elevated permissions (UAC prompt) ...'
 $proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command', 'wsl --install --no-launch; wsl --update; wsl --install -d Ubuntu --no-launch' -Wait -PassThru
 Write-Host 'WSL with Ubuntu ready.'
 
-# --- 6. Install Claude Code ---
+# --- 6. Configure WSL2 mirrored networking ---
+# Mirrored mode shares the Windows network stack so 127.0.0.1 inside WSL
+# is the same as 127.0.0.1 on Windows — dev servers just work without binding to 0.0.0.0.
+
+$wslConfig = "$env:USERPROFILE\.wslconfig"
+if ((Test-Path $wslConfig) -and (Select-String -Path $wslConfig -Pattern 'networkingMode' -Quiet)) {
+    Write-Host '.wslconfig already has networkingMode configured.'
+} else {
+    Write-Host 'Enabling WSL2 mirrored networking in .wslconfig ...'
+    Add-Content -Path $wslConfig -Value "`n[wsl2]`nnetworkingMode=mirrored"
+    Write-Host 'Restarting WSL to apply networking change ...'
+    wsl --shutdown
+    Write-Host 'WSL restarted with mirrored networking.'
+}
+
+# --- 7. Install Claude Code ---
 
 $claudeBin = "$env:USERPROFILE\.local\bin"
 if (Get-Command claude -ErrorAction SilentlyContinue) {
@@ -101,7 +116,7 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
     $env:Path = "$claudeBin;$env:Path"
 }
 
-# --- 7. Bitwarden login ---
+# --- 8. Bitwarden login ---
 
 Write-Host 'Checking Bitwarden status ...'
 $bwStatus = bw status 2>$null | ConvertFrom-Json
@@ -119,7 +134,7 @@ if ($bwStatus.status -eq 'locked') {
     if ($LASTEXITCODE -ne 0) { throw 'Bitwarden unlock failed.' }
 }
 
-# --- 8. Extract SSH public key and switch chezmoi repo to SSH remote ---
+# --- 9. Extract SSH public key and switch chezmoi repo to SSH remote ---
 
 $sshDir = "$env:USERPROFILE\.ssh"
 if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
@@ -135,7 +150,7 @@ if ($pubKey) {
 git -C "$env:USERPROFILE\.local\share\chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
 Write-Host 'Chezmoi remote switched to SSH.'
 
-# --- 9. Windows preferences (not synced by Microsoft account) ---
+# --- 10. Windows preferences (not synced by Microsoft account) ---
 
 $themePath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 Set-ItemProperty -Path $themePath -Name AppsUseLightTheme -Value 0
