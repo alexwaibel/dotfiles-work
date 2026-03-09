@@ -52,23 +52,21 @@
 {{/* Azure CLI: Teams channel notifications scoped to our team, and ADO draft PR creation */}}
       "Bash(az rest --method POST --url \"https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}:*)",
       "Bash(az repos pr create:*)",
-{{/* File tools scoped to project directories and agent worktrees.
+{{/* File tools scoped to project directories (including worktrees created inside repos).
      Background agents cannot prompt for permission so these must be pre-approved.
-     Paths cover repos from chezmoi config plus the worktree staging area. */}}
+     Worktree agents inherit the parent session's settings, NOT repo project settings,
+     so all needed permissions must be here in user-level settings. */}}
 {{- $home := .chezmoi.homeDir -}}
 {{- range .ado.repos }}
-      "Read({{ $home }}/{{ .name }}/**)",
-      "Edit({{ $home }}/{{ .name }}/**)",
-      "Write({{ $home }}/{{ .name }}/**)",
-      "Grep({{ $home }}/{{ .name }}/**)",
+      "Read(/{{ $home }}/{{ .name }}/**)",
+      "Edit(/{{ $home }}/{{ .name }}/**)",
+      "Write(/{{ $home }}/{{ .name }}/**)",
+      "Grep(/{{ $home }}/{{ .name }}/**)",
+      "Glob(/{{ $home }}/{{ .name }}/**)",
 {{- end }}
-      "Read({{ $home }}/.claude/worktrees/**)",
-      "Edit({{ $home }}/.claude/worktrees/**)",
-      "Write({{ $home }}/.claude/worktrees/**)",
-      "Grep({{ $home }}/.claude/worktrees/**)",
 {{/* Cockpit state file: local markdown tracking agent status per sprint. */}}
-      "Edit({{ $home }}/cockpit/state/ado-tasks.md)",
-      "Write({{ $home }}/cockpit/state/ado-tasks.md)",
+      "Edit(/{{ $home }}/cockpit/state/ado-tasks.md)",
+      "Write(/{{ $home }}/cockpit/state/ado-tasks.md)",
 {{/* ADO MCP read-only: sprint/iteration queries, backlog views, work item reads */}}
       "mcp__azure-devops__work_list_team_iterations",
       "mcp__azure-devops__work_list_iterations",
