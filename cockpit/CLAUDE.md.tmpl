@@ -140,14 +140,14 @@ Base: main (or master — check git)
 5. Implement the minimal fix/feature to make the test pass (GREEN)
 6. Refactor if needed while keeping tests green
 7. Run the full test suite again — all tests must pass
-8. Commit with a descriptive message summarizing the change
+8. Commit with a descriptive message summarizing the change. Do NOT use `AB#` prefixes — work items are linked via the PR, not commit messages.
 9. Self-review: run `git diff main...HEAD` and score your changes (0-100) on:
    - Correctness: does this fix/implement the work item?
    - Scope: are ALL changes related to this work item? No unrelated modifications?
    - Tests: are existing tests passing? Are new tests needed and present?
    - Style: does the code match the repo's conventions?
    If score < 80, fix issues before proceeding. Note the score in your PR description.
-10. Push branch and open a DRAFT PR with a descriptive title. Link the work item via the PR's "Work items" section using `az repos pr create --work-items <ID>`.
+10. Push branch and open a DRAFT PR with a descriptive title (no `AB#` prefix). Link the work item using `az repos pr create --work-items <ID>`.
 11. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
 12. Update ADO work item state to Active if currently Proposed
 
