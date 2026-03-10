@@ -55,7 +55,20 @@ echo "Adding Azure DevOps CLI extension ..."
 az extension add --name azure-devops --yes 2>/dev/null || true
 echo "azure-devops extension ready."
 
-# --- 6. Install Claude Code ---
+# --- 6. Install Google Chrome (needed for Claude Code /chrome integration) ---
+
+if command -v google-chrome &>/dev/null; then
+    echo "Google Chrome is already installed."
+else
+    echo "Installing Google Chrome ..."
+    curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/chrome.deb
+    sudo apt-get install -y -qq /tmp/chrome.deb
+    rm -f /tmp/chrome.deb
+    echo "Opening Chrome to install the Claude extension ..."
+    google-chrome "https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn" &>/dev/null &
+fi
+
+# --- 7. Install Claude Code ---
 
 if command -v claude &>/dev/null; then
     echo "Claude Code is already installed."
@@ -64,7 +77,7 @@ else
     curl -fsSL https://claude.ai/install.sh | bash
 fi
 
-# --- 7. Bitwarden login ---
+# --- 8. Bitwarden login ---
 
 echo "Checking Bitwarden status ..."
 bw_status=$(bw status 2>/dev/null | jq -r '.status' || echo "not-installed")
@@ -80,7 +93,7 @@ if [ "$bw_status" = "locked" ]; then
     export BW_SESSION
 fi
 
-# --- 8. Set up SSH agent bridge from Windows and configure SSH ---
+# --- 9. Set up SSH agent bridge from Windows and configure SSH ---
 
 mkdir -p "$HOME/.ssh"
 
@@ -109,7 +122,7 @@ else
     echo "WARNING: Could not find alexwaibelmsft key in SSH agent — make sure Bitwarden SSH agent is running."
 fi
 
-# --- 9. Symlink Windows .npmrc so WSL uses the same ADO feed tokens ---
+# --- 10. Symlink Windows .npmrc so WSL uses the same ADO feed tokens ---
 
 win_npmrc="/mnt/c/Users/$(whoami)/.npmrc"
 if [ -f "$win_npmrc" ]; then
