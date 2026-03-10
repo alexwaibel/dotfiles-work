@@ -8,6 +8,4 @@ install-and-setup.ps1
 install-and-setup.sh
 .ssh/agent-bridge.sh
 .local/bin/ado-npm-auth-wsl
-.local/bin/attach-yubikey
-.local/bin/detach-yubikey
 {{ end }}

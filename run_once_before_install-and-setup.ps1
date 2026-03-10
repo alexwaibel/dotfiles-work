@@ -13,7 +13,6 @@ $packages = @(
     'CoreyButler.NVMforWindows'
     'jstarks.npiperelay'
     'jqlang.jq'
-    'dorssel.usbipd-win'
 )
 
 foreach ($pkg in $packages) {
@@ -85,26 +84,7 @@ Write-Host '  Requesting elevated permissions (UAC prompt) ...'
 $proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command', 'wsl --install --no-launch; wsl --update; wsl --install -d Ubuntu --no-launch' -Wait -PassThru
 Write-Host 'WSL with Ubuntu ready.'
 
-# --- 6. Bind YubiKey for WSL USB passthrough ---
-# usbipd bind is persistent across reboots and does not detach the key from Windows.
-# Attach must be done per-session from WSL (see attach-yubikey script).
-
-$yubikey = usbipd list 2>$null | Select-String -Pattern 'Yubico|YubiKey'
-if ($yubikey) {
-    $busId = ($yubikey.Line -split '\s+')[0]
-    Write-Host "Found YubiKey at bus ID $busId — binding for WSL ..."
-    Write-Host '  Requesting elevated permissions (UAC prompt) ...'
-    $proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command', "usbipd bind --busid $busId" -Wait -PassThru
-    if ($proc.ExitCode -eq 0) {
-        Write-Host "YubiKey bound. Run 'attach-yubikey' from WSL to attach per-session."
-    } else {
-        Write-Warning 'Failed to bind YubiKey — you can run "usbipd bind --busid <ID>" from an admin shell later.'
-    }
-} else {
-    Write-Host 'No YubiKey detected — skipping USB passthrough setup. Plug in your key and run "usbipd bind --busid <ID>" from an admin shell later.'
-}
-
-# --- 7. Install Claude Code ---
+# --- 6. Install Claude Code ---
 
 $claudeBin = "$env:USERPROFILE\.local\bin"
 if (Get-Command claude -ErrorAction SilentlyContinue) {
@@ -121,7 +101,7 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
     $env:Path = "$claudeBin;$env:Path"
 }
 
-# --- 8. Bitwarden login ---
+# --- 7. Bitwarden login ---
 
 Write-Host 'Checking Bitwarden status ...'
 $bwStatus = bw status 2>$null | ConvertFrom-Json
@@ -139,7 +119,7 @@ if ($bwStatus.status -eq 'locked') {
     if ($LASTEXITCODE -ne 0) { throw 'Bitwarden unlock failed.' }
 }
 
-# --- 9. Extract SSH public key and switch chezmoi repo to SSH remote ---
+# --- 8. Extract SSH public key and switch chezmoi repo to SSH remote ---
 
 $sshDir = "$env:USERPROFILE\.ssh"
 if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
@@ -155,7 +135,7 @@ if ($pubKey) {
 git -C "$env:USERPROFILE\.local\share\chezmoi" remote set-url origin git@github.com:alexwaibel/dotfiles-work.git
 Write-Host 'Chezmoi remote switched to SSH.'
 
-# --- 10. Windows preferences (not synced by Microsoft account) ---
+# --- 9. Windows preferences (not synced by Microsoft account) ---
 
 $themePath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize'
 Set-ItemProperty -Path $themePath -Name AppsUseLightTheme -Value 0
