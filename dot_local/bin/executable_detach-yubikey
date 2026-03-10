@@ -1,0 +1,20 @@
+#!/bin/bash
+# Detach a YubiKey from WSL, returning it to Windows.
+
+set -euo pipefail
+
+if ! command -v usbipd.exe &>/dev/null; then
+    echo "ERROR: usbipd.exe not found — install usbipd-win on Windows first."
+    exit 1
+fi
+
+busid=$(usbipd.exe list 2>/dev/null | grep -i 'yubico\|yubikey' | awk '{print $1}' | head -1)
+
+if [ -z "$busid" ]; then
+    echo "ERROR: No YubiKey found. Make sure it's plugged in."
+    exit 1
+fi
+
+echo "Detaching YubiKey at bus ID $busid from WSL ..."
+usbipd.exe detach --busid "$busid"
+echo "YubiKey returned to Windows."
