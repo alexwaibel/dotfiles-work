@@ -134,12 +134,13 @@ The goal is to maximize the chance an agent completes autonomously. Upfront disc
    - Edge cases and risks are acknowledged
 
    This may take multiple rounds. That's fine — it's better than a failed agent run.
-8. **Post plan to ADO** — add a comment on the work item with the finalized plan (files, approach, risks, open questions). This creates a record of what was agreed and gives reviewers context.
-9. **Launch** — on user confirmation, for each approved item:
+8. **Break into small units** — decompose the plan into small, atomic changes that can each be committed independently. Each unit should be self-contained and leave the codebase in a working state. List the units in order in the plan. This makes PRs easier to review and reduces the blast radius of mistakes.
+9. **Post plan to ADO** — add a comment on the work item with the finalized plan (units, files, approach, risks, open questions). This creates a record of what was agreed and gives reviewers context.
+10. **Launch** — on user confirmation, for each approved item:
    - **Code agents**: Launch background Agent (isolation: "worktree", run_in_background: true). Create in-session task via TaskCreate. Update state → `in-progress`, set Branch. Include the concrete plan from step 7 in the agent prompt.
    - **Investigation agents**: Launch background Agent (no worktree, run_in_background: true). Create in-session task. Update state → `in-progress`.
    - **Deferred items**: Update state → `blocked` or `skipped` with rationale.
-10. Update state file.
+11. Update state file.
 
 ### Agent Prompt — Code Tasks
 ```
@@ -158,20 +159,22 @@ Base: main (or master — check git)
 1. Read the repo's CLAUDE.md for build/test/lint commands
 2. Run the full test suite. All tests MUST pass before you write any code. If tests fail on a clean checkout, stop and report the failures — do not proceed.
 3. Understand the codebase area relevant to this bug/task
-4. Write a failing test that reproduces the bug or validates the new feature (RED)
-5. Implement the minimal fix/feature to make the test pass (GREEN)
-6. Refactor if needed while keeping tests green
-7. Run the full test suite again — all tests must pass
-8. Commit with a descriptive message summarizing the change. Do NOT use `AB#` prefixes — work items are linked via the PR, not commit messages.
-9. Self-review: run `git diff main...HEAD` and score your changes (0-100) on:
+4. Work through the plan one unit at a time. For each unit:
+   a. Write a failing test that reproduces the bug or validates the change (RED)
+   b. Implement the minimal fix/feature to make the test pass (GREEN)
+   c. Refactor if needed while keeping tests green
+   d. Run the full test suite — all tests must pass
+   e. Commit with a descriptive message for that unit. Do NOT use `AB#` prefixes — work items are linked via the PR, not commit messages.
+   Each commit should be atomic and leave the codebase in a working state.
+5. Self-review: run `git diff main...HEAD` and score your changes (0-100) on:
    - Correctness: does this fix/implement the work item?
    - Scope: are ALL changes related to this work item? No unrelated modifications?
    - Tests: are existing tests passing? Are new tests needed and present?
    - Style: does the code match the repo's conventions?
    If score < 80, fix issues before proceeding. Note the score in your PR description.
-10. Push branch and open a DRAFT PR with a descriptive title (no `AB#` prefix). Link the work item using `az repos pr create --work-items <ID>`.
-11. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
-12. Update ADO work item state to Active if currently Proposed
+6. Push branch and open a DRAFT PR with a descriptive title (no `AB#` prefix). Link the work item using `az repos pr create --work-items <ID>`.
+7. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
+8. Update ADO work item state to Active if currently Proposed
 
 ## Notifications
 Post to Teams when: starting work, opening a PR, blocked/need help, or done.
