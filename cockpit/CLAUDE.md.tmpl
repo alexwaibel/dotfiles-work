@@ -183,6 +183,41 @@ az rest --method POST \
   --headers "Content-Type=application/json" \
   --body '{"body":{"contentType":"html","content":"<b>[WI#<ID>]</b> <status message>"}}'
 
+## Browser Queue (WSL ↔ Windows handoff)
+When you need browser access (wiki, authenticated pages, UI verification), use the
+browser queue instead of blocking. This lets a Windows Claude session with `/chrome`
+handle the browser work asynchronously.
+
+**Request a browser task:**
+1. Write a request file to `~/cockpit/state/browser-queue/<WI-ID>-<slug>.request.md`:
+   ```markdown
+   # Browser Request: WI#<ID>
+   - Work Item: <ID>
+   - Agent Task: <task-id if available>
+   - Created: <ISO timestamp>
+
+   ## What I Need
+   <Specific URL to visit, what to look for, what to extract or verify>
+
+   ## Context
+   <Why this is needed — what the agent is trying to accomplish>
+   ```
+2. Post to Teams with:
+   ```
+   <b>[WI#<ID>] [NEEDS BROWSER]</b> <what you need>
+   <pre>claude -p "Read \\wsl.localhost\Ubuntu\home\alwaibel\cockpit\state\browser-queue\<WI-ID>-<slug>.request.md and complete the browser task described. Use /chrome to browse. Write your findings to the same path but with .response.md extension."</pre>
+   ```
+3. Continue with any remaining non-browser work. Do NOT block.
+
+**Response format** (written by Windows Claude):
+```markdown
+# Browser Response: WI#<ID>
+- Completed: <ISO timestamp>
+
+## Findings
+<What was found, extracted content, screenshots described, etc.>
+```
+
 ## Shell Commands
 - Your working directory is already set to the repo/worktree — do NOT use `cd`. Run git/yarn commands directly (e.g. `git status`, `yarn lint`).
 - NEVER chain commands with `&&` or `;` — run each as a separate Bash call.
@@ -221,8 +256,28 @@ Check in-flight agents, update state, report progress.
    - Still running → report as in-progress
    - Missing (session restart) → check for branch in repo (`git branch -r`); if found with commits → `done-needs-review`, else → `blocked` ("agent session lost")
 3. Check for PRs on branches without a PR recorded
-4. Write updated state file
-5. Report: in-progress, completed, blocked, needs-human-attention
+4. **Check browser queue** (`~/cockpit/state/browser-queue/`):
+   - `.request.md` without matching `.response.md` → pending browser task, remind user
+   - `.response.md` exists → feed findings back to the relevant work item's agent (resume or note in state)
+5. Write updated state file
+6. Report: in-progress, completed, blocked, browser-tasks-pending, needs-human-attention
+
+---
+
+## Command: browser-queue
+
+List and manage pending browser tasks.
+
+1. Scan `~/cockpit/state/browser-queue/` for `.request.md` files
+2. For each, check if a matching `.response.md` exists
+3. Report:
+   - **Pending**: requests without responses — show the Teams command to copy-paste
+   - **Completed**: requests with responses — show summary, offer to feed back to agent
+   - **Stale**: requests older than 24h without response — flag for attention
+4. For completed responses:
+   - If the originating agent task is still running, the response will be picked up automatically
+   - If the agent finished while waiting, offer to launch a follow-up agent with the response context
+5. Clean up: offer to archive completed request/response pairs to `~/cockpit/state/browser-queue/archive/`
 
 ---
 
@@ -233,4 +288,4 @@ Check in-flight agents, update state, report progress.
 - Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
 - Only open DRAFT PRs — never publish or merge
 - Never modify the user's current working tree or checked-out branch
-- State file (~/cockpit/state/ado-tasks.md) is the ONLY mutable file the cockpit session writes to (besides agent worktrees)
+- State file (~/cockpit/state/ado-tasks.md) and browser queue (~/cockpit/state/browser-queue/) are the ONLY mutable paths the cockpit session and agents write to (besides agent worktrees)

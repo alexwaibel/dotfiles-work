@@ -1,4 +1,6 @@
 cockpit/state/ado-tasks.md
+cockpit/state/browser-queue/*.md
+cockpit/state/browser-queue/archive/*.md
 
 {{ if ne .chezmoi.os "windows" }}
 install-and-setup.ps1

@@ -13,6 +13,7 @@ $packages = @(
     'CoreyButler.NVMforWindows'
     'jstarks.npiperelay'
     'jqlang.jq'
+    'Google.Chrome'
 )
 
 foreach ($pkg in $packages) {
