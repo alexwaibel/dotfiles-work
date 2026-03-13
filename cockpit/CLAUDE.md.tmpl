@@ -116,31 +116,36 @@ Assess agent fitness for items, propose a plan, launch on user confirmation.
 
 The goal is to maximize the chance an agent completes autonomously. Upfront discussion is cheap; failed agent runs are expensive. Never launch an agent on a vague or assumption-laden plan.
 
-5. **Identify gaps** — for each item, flag what's unclear or assumed:
+5. **Trace the data flow** — for changes that cross system boundaries (e.g., service → resolver → GraphQL → framework → UI), explicitly map the full chain before planning. At each boundary, note:
+   - What types/interfaces constrain the data? (check the actual type definitions, not assumptions)
+   - Does the framework transform, wrap, or strip fields? (e.g., Relay strips GraphQL error fields to `PayloadError`)
+   - Are there existing patterns for the analogous success path or similar error handling?
+6. **Identify gaps** — for each item, flag what's unclear or assumed:
    - Is the root cause known and verified, or hypothesized?
    - Are the reproduction steps concrete?
    - Which files/areas need to change? Can you identify them now?
    - Are there multiple possible approaches? Which is best and why?
    - Does the fix depend on environment, config, or external state the agent can't access?
-6. **Present findings to user** — for each item show:
+   - Are there type constraints or framework behaviors at boundaries that need verification before committing to an approach?
+7. **Present findings to user** — for each item show:
    - Fitness assessment with rationale
    - Gaps/assumptions identified (bulleted list)
    - Proposed plan: specific files to change, approach, and risks
    - Recommended action: `plan more` / `investigate first` / `ready to launch`
-7. **Iterate with user** — discuss until the plan is concrete enough that:
+8. **Iterate with user** — discuss until the plan is concrete enough that:
    - The exact files and approach are identified
    - Assumptions are validated (reproduce the issue if possible)
    - The agent prompt will contain specific, actionable instructions (not vague goals)
    - Edge cases and risks are acknowledged
 
    This may take multiple rounds. That's fine — it's better than a failed agent run.
-8. **Break into small units** — decompose the plan into small, atomic changes that can each be committed independently. Each unit should be self-contained and leave the codebase in a working state. List the units in order in the plan. This makes PRs easier to review and reduces the blast radius of mistakes.
-9. **Post plan to ADO** — add a comment on the work item with the finalized plan (units, files, approach, risks, open questions). This creates a record of what was agreed and gives reviewers context.
-10. **Launch** — on user confirmation, for each approved item:
+9. **Break into small units** — decompose the plan into small, atomic changes that can each be committed independently. Each unit should be self-contained and leave the codebase in a working state. List the units in order in the plan. This makes PRs easier to review and reduces the blast radius of mistakes.
+10. **Post plan to ADO** — add a comment on the work item with the finalized plan (units, files, approach, risks, open questions). This creates a record of what was agreed and gives reviewers context.
+11. **Launch** — on user confirmation, for each approved item:
    - **Code agents**: Launch background Agent (isolation: "worktree", run_in_background: true). Create in-session task via TaskCreate. Update state → `in-progress`, set Branch. Include the concrete plan from step 7 in the agent prompt.
    - **Investigation agents**: Launch background Agent (no worktree, run_in_background: true). Create in-session task. Update state → `in-progress`.
    - **Deferred items**: Update state → `blocked` or `skipped` with rationale.
-11. Update state file.
+12. Update state file.
 
 ### Agent Prompt — Code Tasks
 ```
