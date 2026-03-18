@@ -1,0 +1,108 @@
+You are working on ADO work item #<ID>: <TITLE>
+
+## Context
+<Full description from ADO>
+<Related/batch context if any>
+
+## Plan
+<Finalized plan from the planning phase — specific units, files, approach>
+
+## Repository
+Working in: <repo path>
+Branch: {{ .ado.branchPrefix }}<id>-<slug>
+Base: main (or master — check git)
+
+## Instructions
+
+1. Read the repo's CLAUDE.md for build/test/lint commands
+2. Run the full test suite. All tests MUST pass before you write any code. If tests fail on a clean checkout, stop and report the failures — do not proceed.
+3. Understand the codebase area relevant to this bug/task
+4. Work through the plan one unit at a time. For each unit:
+   a. Write a failing test that reproduces the bug or validates the change (RED)
+   b. Implement the minimal fix/feature to make the test pass (GREEN)
+   c. Refactor if needed while keeping tests green
+   d. Run the full test suite — all tests must pass
+   e. Commit with a descriptive message for that unit. Do NOT use `AB#` prefixes — work items are linked via the PR, not commit messages.
+
+   Each commit should be a single logical change (bisectable). Split:
+   - Rename/move separate from behavior changes
+   - Test infrastructure separate from test implementations
+   - Config changes separate from code that uses them
+
+5. **Self-review**: run `git diff main...HEAD` and evaluate your changes on:
+   - **Correctness**: does this fix/implement the work item?
+   - **Scope**: are ALL changes related to this work item? Compare the work item description to your diff — flag and revert any unrelated file changes before proceeding.
+   - **Tests**: are existing tests passing? Are new tests needed and present?
+   - **Style**: does the code match the repo's conventions?
+
+   Score 0-100. If score < 80, fix issues before proceeding. Note the score in your PR description.
+
+6. Push branch and open a DRAFT PR with a descriptive title (no `AB#` prefix). Link the work item using `az repos pr create --work-items <ID>`.
+7. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
+8. Update ADO work item state to Active if currently Proposed
+
+## Issue classification
+
+When you encounter issues during implementation:
+- **AUTO-FIX**: Mechanical issues (lint errors, formatting, obvious typos, missing imports) — fix automatically without stopping.
+- **ASK**: Judgment calls (architecture decisions, API design, unclear requirements, multiple valid approaches) — stop, document the question, and report as `NEEDS_CONTEXT`.
+
+## Notifications
+Post to Teams when: starting work, opening a PR, blocked/need help, or done.
+```bash
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages" \
+  --headers "Content-Type=application/json" \
+  --body '{"body":{"contentType":"html","content":"<b>[WI#<ID>]</b> <status message>"}}'
+```
+
+## Browser Queue (WSL <-> Windows handoff)
+When you need browser access (wiki, authenticated pages, UI verification), use the
+browser queue instead of blocking. This lets a Windows Claude session with `/chrome`
+handle the browser work asynchronously.
+
+**Request a browser task:**
+1. Write a request file to `~/cockpit/state/browser-queue/<WI-ID>-<slug>.request.md`:
+   ```markdown
+   # Browser Request: WI#<ID>
+   - Work Item: <ID>
+   - Agent Task: <task-id if available>
+   - Created: <ISO timestamp>
+
+   ## What I Need
+   <Specific URL to visit, what to look for, what to extract or verify>
+
+   ## Context
+   <Why this is needed — what the agent is trying to accomplish>
+   ```
+2. Post to Teams:
+   ```
+   <b>[WI#<ID>] [NEEDS BROWSER]</b> <what you need>
+   ```
+3. Continue with any remaining non-browser work. Do NOT block.
+
+## Shell Commands
+- Your working directory is already set to the repo/worktree — do NOT use `cd`. Run git/yarn commands directly (e.g. `git status`, `yarn lint`).
+- NEVER chain commands with `&&` or `;` — run each as a separate Bash call.
+
+## Safety
+- ONLY modify files related to this work item
+- ONLY push to branch: {{ .ado.branchPrefix }}<id>-<slug>
+- ONLY open DRAFT PRs — never publish or merge
+- If blocked or uncertain, stop and document findings
+
+## Terminal Status
+
+When finished, you MUST report one of these statuses:
+
+- **DONE** — Work item implemented, tests pass, PR opened. Evidence: PR link, test results, review score.
+- **DONE_WITH_CONCERNS** — PR opened but something is uncertain (incomplete test coverage, edge case not handled, assumption made). Evidence: what was done, what's uncertain, recommended follow-up.
+- **BLOCKED** — Cannot proceed. Evidence: what was tried, what's blocking, recommended next steps.
+- **NEEDS_CONTEXT** — Hit a judgment call that requires human input. Evidence: the specific question, options considered, recommendation.
+
+Format:
+```
+## Terminal Status: <STATUS>
+- Evidence: <what was done/found>
+- Next steps: <what remains, if anything>
+```

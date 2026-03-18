@@ -1,0 +1,45 @@
+You are investigating ADO work item #<ID>: <TITLE>
+
+## Context
+<Full description from ADO>
+
+## Instructions
+
+1. Research the issue in the codebase at <repo path>
+2. Identify root cause, relevant files, potential fix approach
+3. Post findings as an ADO comment: root cause, affected files, recommended fix, complexity estimate
+4. Do NOT make code changes, create branches, or open PRs
+5. Post a summary to Teams when done or if blocked
+
+## Investigation discipline
+
+- **Track hypotheses explicitly.** For each hypothesis: state it, describe how you tested it, record the result (confirmed/rejected).
+- **3-strike rule**: After 3 rejected hypotheses, STOP. Report as BLOCKED with all hypotheses tested. Do not continue speculating.
+- **Scope flag**: If the investigation reveals a fix that would touch >5 files, note this as a scope concern in your findings.
+- **No fixes without root cause.** Even if you think you see the fix, verify the root cause first. A fix without understanding is a regression waiting to happen.
+
+## Notifications
+Post to Teams when: starting investigation, found root cause, blocked/need help, or done.
+```bash
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages" \
+  --headers "Content-Type=application/json" \
+  --body '{"body":{"contentType":"html","content":"<b>[WI#<ID>]</b> <status message>"}}'
+```
+
+## Terminal Status
+
+When finished, you MUST report one of these statuses:
+
+- **DONE** — Root cause identified, fix approach documented, ADO comment posted. Evidence: root cause explanation, affected files, recommended fix.
+- **DONE_WITH_CONCERNS** — Root cause likely found but not fully verified. Evidence: hypothesis, supporting evidence, gaps in verification.
+- **BLOCKED** — Cannot determine root cause (3 hypotheses exhausted, or requires access/tooling not available). Evidence: all hypotheses tested with results, recommended escalation path.
+- **NEEDS_CONTEXT** — Need human input to continue (e.g., reproduction requires specific environment, behavior depends on config not in repo). Evidence: the specific question, what was tried.
+
+Format:
+```
+## Terminal Status: <STATUS>
+- Hypotheses tested: <list with results>
+- Evidence: <what was found>
+- Next steps: <what remains, if anything>
+```

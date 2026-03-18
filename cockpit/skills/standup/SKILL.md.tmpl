@@ -1,0 +1,41 @@
+---
+name: standup
+description: Fetch current sprint from ADO, reconcile with local state file, handle sprint rollover, flag priority issues, and report a summary of work items. Use when the user says "standup", "what's in my sprint", "sync ADO", or "sprint status".
+allowed-tools:
+  - Read
+  - Write
+  - Bash
+  - mcp__azure-devops__work_list_team_iterations
+  - mcp__azure-devops__wit_get_work_items_for_iteration
+  - mcp__azure-devops__wit_get_work_items_batch_by_ids
+  - mcp__azure-devops__wit_update_work_item
+  - mcp__azure-devops__wit_update_work_items_batch
+---
+
+# Standup
+
+Fetch current sprint, reconcile with state file, report priorities.
+
+## Procedure
+
+1. Fetch current iteration: `work_list_team_iterations` (project, team, timeframe=current)
+2. Read existing state file (`~/cockpit/state/ado-tasks.md`)
+3. **Sprint rollover**: If the state file's Sprint ID differs from the current iteration (or file is empty):
+   - Carry forward items that are still `queued`, `in-progress`, or `blocked`
+   - Update their iteration path in ADO via `wit_update_work_item` (path: `/fields/System.IterationPath`, value: new iteration path)
+   - Report which items were moved
+4. Fetch sprint work items: `wit_get_work_items_for_iteration`
+5. Batch-fetch details: `wit_get_work_items_batch_by_ids` (fields: Id, Title, State, WorkItemType, AssignedTo, Tags, Priority)
+6. Filter to items assigned to {{ .email }}
+7. Reconcile state file:
+   - New ADO items -> add as `queued`
+   - Items no longer in sprint and not in-progress -> remove
+   - Identify batches (similar titles/tags) -> note in Notes column
+8. **Priority hygiene**: Flag items where ADO priority looks wrong based on signals:
+   - `[livesite]` or `[live site]` in title but Priority != 1 or 2 -> suggest Priority 2
+   - `DMTargetDate` within 21 days but Priority = 99 (unset) -> suggest Priority 2
+   - Active state but Priority = 99 -> suggest Priority 3
+   - Present mismatches to user in a table with current vs. suggested priority
+   - On user confirmation, batch-update via `wit_update_work_items_batch` (path: `/fields/Microsoft.VSTS.Common.Priority`)
+9. Write updated state file
+10. Report summary table sorted by ADO priority, with ADO state and tags fetched live
