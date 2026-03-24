@@ -46,6 +46,13 @@
       "Grep(/{{ $home }}/{{ .name }}/**)",
       "Glob(/{{ $home }}/{{ .name }}/**)",
 {{- end }}
+{{/* Chezmoi source directory: dotfiles repo managed by chezmoi. */}}
+      "Bash(cd {{ $home }}/.local/share/chezmoi:*)",
+      "Read(/{{ $home }}/.local/share/chezmoi/**)",
+      "Edit(/{{ $home }}/.local/share/chezmoi/**)",
+      "Write(/{{ $home }}/.local/share/chezmoi/**)",
+      "Grep(/{{ $home }}/.local/share/chezmoi/**)",
+      "Glob(/{{ $home }}/.local/share/chezmoi/**)",
 {{/* Cockpit state file: local markdown tracking agent status per sprint. */}}
       "Edit(/{{ $home }}/cockpit/state/ado-tasks.md)",
       "Write(/{{ $home }}/cockpit/state/ado-tasks.md)",
@@ -78,6 +85,8 @@
       "mcp__playwright-mocked__browser_snapshot",
       "mcp__playwright-mocked__browser_tab_list",
       "mcp__playwright-mocked__browser_close",
+{{/* Azure Kusto MCP: read-only KQL queries against Azure Data Explorer clusters. All kusto tools are safe (readOnlyHint: true). */}}
+      "mcp__azure-kusto__kusto",
 {{/* ADO MCP write: field updates and comments. Safe — ADO tracks full revision history so any change can be viewed and reverted in ADO UI. */}}
       "mcp__azure-devops__wit_update_work_item",
       "mcp__azure-devops__wit_update_work_items_batch",
