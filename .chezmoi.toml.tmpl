@@ -20,6 +20,11 @@
     path = "{{ promptStringOnce $repo0 "path" "Repo local path (e.g. ~/my-repo)" }}"
     adoProject = "{{ promptStringOnce $repo0 "adoProject" "ADO project containing this repo (may differ from the board project)" }}"
 
+{{- $mcpTool := dig "mcpTool" (dict) . }}
+[data.mcpTool]
+    command = "{{ promptStringOnce $mcpTool "command" "Internal MCP tool command name" }}"
+    installUrl = "{{ promptStringOnce $mcpTool "installUrl" "Internal MCP tool install URL" }}"
+
 {{- $kusto := dig "kusto" (dict) . }}
 [data.kusto]
     clusterUri = "{{ promptStringOnce $kusto "clusterUri" "Default Kusto cluster URI" }}"

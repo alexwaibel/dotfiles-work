@@ -9,9 +9,9 @@ if [ -z "$stdin" ] || [ "$(echo "$stdin" | tr -d '[:space:]')" = "" ]; then
 fi
 
 {{ if eq .chezmoi.os "windows" -}}
-managed_servers='{"azure-devops":{"command":"cmd","args":["/c","npx","-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]},"azure-kusto":{"command":"cmd","args":["/c","npx","-y","@azure/mcp@latest","server","start","--namespace","kusto"]},"playwright":{"command":"cmd","args":["/c","npx","-y","--registry","https://registry.npmjs.org","@playwright/mcp@latest","--headless"]}}'
+managed_servers='{"azure-devops":{"command":"cmd","args":["/c","npx","-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]},"azure-kusto":{"command":"cmd","args":["/c","npx","-y","@azure/mcp@latest","server","start","--namespace","kusto"]},"icm":{"command":"cmd","args":["/c","{{ .mcpTool.command }}","mcp","icm"]},"workiq":{"command":"cmd","args":["/c","{{ .mcpTool.command }}","mcp","workiq"]},"playwright":{"command":"cmd","args":["/c","npx","-y","--registry","https://registry.npmjs.org","@playwright/mcp@latest","--headless"]}}'
 {{ else -}}
-managed_servers='{"azure-devops":{"command":"npx","args":["-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]},"azure-kusto":{"command":"npx","args":["-y","@azure/mcp@latest","server","start","--namespace","kusto"]},"playwright":{"command":"npx","args":["-y","--registry","https://registry.npmjs.org","@playwright/mcp@latest","--headless"]},"playwright-mocked":{"command":"npx","args":["-y","--registry","https://registry.npmjs.org","@playwright/mcp@latest","--cdp-endpoint","http://127.0.0.1:9222"]}}'
+managed_servers='{"azure-devops":{"command":"npx","args":["-y","@azure-devops/mcp","{{ .ado.org }}","-d","work","work-items","-a","azcli"]},"azure-kusto":{"command":"npx","args":["-y","@azure/mcp@latest","server","start","--namespace","kusto"]},"icm":{"command":"{{ .mcpTool.command }}","args":["mcp","icm"]},"workiq":{"command":"{{ .mcpTool.command }}","args":["mcp","workiq"]},"playwright":{"command":"npx","args":["-y","--registry","https://registry.npmjs.org","@playwright/mcp@latest","--headless"]},"playwright-mocked":{"command":"npx","args":["-y","--registry","https://registry.npmjs.org","@playwright/mcp@latest","--cdp-endpoint","http://127.0.0.1:9222"]}}'
 {{ end -}}
 
 echo "$stdin" | jq --argjson managed "$managed_servers" '
