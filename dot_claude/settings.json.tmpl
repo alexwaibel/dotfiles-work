@@ -1,20 +1,7 @@
-{{- /* Claude Code settings — rendered by chezmoi, comments stripped in output */ -}}
+{{- /* Claude Code settings — rendered by chezmoi, comments stripped in output.
+     Key order matches what Claude Code writes when it modifies this file:
+     permissions → model → hooks → reasoningEffort. */ -}}
 {
-  "model": "opus",
-  "reasoningEffort": "medium",
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash(git push*)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/guard-git-push.sh"
-          }
-        ]
-      }
-    ]
-  },
   "permissions": {
     "allow": [
 {{/* Read-only shell: git and filesystem inspection, no side effects */}}
@@ -40,17 +27,8 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git fetch:*)",
-{{/* Build tools: scoped to safe local commands. Dev servers (yarn dev/start/staging) require prompting. */}}
+{{/* Build tools: yarn install is kept here globally; other yarn commands are in per-repo project settings. */}}
       "Bash(yarn install:*)",
-      "Bash(yarn build:*)",
-      "Bash(yarn lint:*)",
-      "Bash(yarn test:*)",
-      "Bash(yarn codegen:*)",
-      "Bash(yarn relay:*)",
-      "Bash(yarn setup:*)",
-      "Bash(yarn predev:*)",
-      "Bash(yarn tsc:*)",
-      "Bash(yarn stats:*)",
 {{/* Azure CLI: Teams channel notifications scoped to our team, and ADO draft PR creation */}}
       "Bash(az rest --method POST --url \"https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}:*)",
       "Bash(az repos pr create:*)",
@@ -87,10 +65,38 @@
       "mcp__azure-devops__wit_get_work_item_type",
       "mcp__azure-devops__wit_get_query",
       "mcp__azure-devops__wit_get_query_results_by_id",
+{{/* Playwright MCP: read-only browser inspection for visual verification of UI changes.
+     Navigate and screenshot are safe — they don't modify state. Snapshot captures accessibility tree. */}}
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_tab_list",
+      "mcp__playwright__browser_close",
+{{/* Playwright MCP (mocked): connects to mock-browser.ts CDP endpoint for mocked visual verification. Same read-only tools. */}}
+      "mcp__playwright-mocked__browser_navigate",
+      "mcp__playwright-mocked__browser_take_screenshot",
+      "mcp__playwright-mocked__browser_snapshot",
+      "mcp__playwright-mocked__browser_tab_list",
+      "mcp__playwright-mocked__browser_close",
 {{/* ADO MCP write: field updates and comments. Safe — ADO tracks full revision history so any change can be viewed and reverted in ADO UI. */}}
       "mcp__azure-devops__wit_update_work_item",
       "mcp__azure-devops__wit_update_work_items_batch",
       "mcp__azure-devops__wit_add_work_item_comment"
     ]
-  }
+  },
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/guard-git-push.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "reasoningEffort": "medium"
 }
