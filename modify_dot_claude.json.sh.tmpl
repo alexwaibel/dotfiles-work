@@ -35,6 +35,14 @@ managed_servers='
     "command": "cmd",
     "args": ["/c", "{{ .mcpTool.command }}", "mcp", "workiq"]
   },
+  "teams-chat": {
+    "command": "cmd",
+    "args": ["/c", "{{ .mcpTool.command }}", "mcp", "teams"]
+  },
+  "mail": {
+    "command": "cmd",
+    "args": ["/c", "{{ .mcpTool.command }}", "mcp", "mail"]
+  },
   "playwright": {
     "command": "cmd",
     "args": ["/c", "npx", "-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--headless"]
@@ -67,6 +75,20 @@ managed_servers='
   "workiq": {
     "command": "cmd.exe",
     "args": ["/c", "%APPDATA%\\{{ .mcpTool.command }}\\CurrentVersion\\{{ .mcpTool.command }}.exe mcp workiq"],
+    "env": {
+      "BROWSER": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+    }
+  },
+  "teams-chat": {
+    "command": "cmd.exe",
+    "args": ["/c", "%APPDATA%\\{{ .mcpTool.command }}\\CurrentVersion\\{{ .mcpTool.command }}.exe mcp teams"],
+    "env": {
+      "BROWSER": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+    }
+  },
+  "mail": {
+    "command": "cmd.exe",
+    "args": ["/c", "%APPDATA%\\{{ .mcpTool.command }}\\CurrentVersion\\{{ .mcpTool.command }}.exe mcp mail"],
     "env": {
       "BROWSER": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
     }
