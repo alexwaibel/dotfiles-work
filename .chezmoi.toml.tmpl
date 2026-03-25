@@ -23,7 +23,8 @@
 {{- $mcpTool := dig "mcpTool" (dict) . }}
 [data.mcpTool]
     command = "{{ promptStringOnce $mcpTool "command" "Internal MCP tool command name" }}"
-    installUrl = "{{ promptStringOnce $mcpTool "installUrl" "Internal MCP tool install URL" }}"
+    installUrl = "{{ promptStringOnce $mcpTool "installUrl" "Internal MCP tool install URL (Linux/sh)" }}"
+    windowsInstallUrl = "{{ promptStringOnce $mcpTool "windowsInstallUrl" "Internal MCP tool install URL (Windows/ps1)" }}"
 
 {{- $kusto := dig "kusto" (dict) . }}
 [data.kusto]
