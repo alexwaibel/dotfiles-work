@@ -52,6 +52,10 @@ while IFS= read -r part; do
   part=$(echo "$part" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   [[ -z "$part" ]] && continue
 
+  # Expand ~ to $HOME so it matches absolute-path allow patterns
+  part="${part// \~\// $HOME/}"
+  part="${part/#\~\//$HOME/}"
+
   matched=false
   for prefix in "${PREFIXES[@]}"; do
     if [[ "$part" == "$prefix"* ]]; then

@@ -74,6 +74,7 @@ echo "=== Edge cases ==="
 expect_passthrough "empty command"            ""
 expect_passthrough "only whitespace"          "   "
 expect_allow "extra whitespace around &&"     "  git status   &&   git log  "
+expect_allow "tilde expands to HOME"         "cd ~/teams-client-workflows && git branch --list '*toast*'"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
