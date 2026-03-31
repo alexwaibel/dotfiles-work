@@ -121,7 +121,7 @@ $psProfile = $PROFILE.CurrentUserAllHosts
 $psProfileDir = Split-Path $psProfile
 if (-not (Test-Path $psProfileDir)) { New-Item -ItemType Directory -Path $psProfileDir | Out-Null }
 if (-not (Test-Path $psProfile) -or -not (Select-String -Path $psProfile -Pattern 'starship init' -Quiet)) {
-    Add-Content -Path $psProfile -Value "`nInvoke-Expression (&starship init powershell)"
+    Add-Content -Path $psProfile -Value "`nif (Get-Command starship -ErrorAction SilentlyContinue) { Invoke-Expression (&starship init powershell) }"
     Write-Host 'Added starship init to PowerShell profile.'
 } else {
     Write-Host 'Starship already in PowerShell profile.'
