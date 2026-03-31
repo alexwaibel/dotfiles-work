@@ -53,9 +53,15 @@
       "Write(/{{ $home }}/.local/share/chezmoi/**)",
       "Grep(/{{ $home }}/.local/share/chezmoi/**)",
       "Glob(/{{ $home }}/.local/share/chezmoi/**)",
-{{/* Cockpit state file: local markdown tracking agent status per sprint. */}}
-      "Edit(/{{ $home }}/cockpit/state/ado-tasks.md)",
-      "Write(/{{ $home }}/cockpit/state/ado-tasks.md)",
+{{/* Logseq notebook: synced via OneDrive. Read/search for daily reviews, edit to mark TODOs done during triage. */}}
+      "Read(//mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq/**)",
+      "Grep(//mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq/**)",
+      "Glob(//mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq/**)",
+      "Edit(//mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq/**)",
+{{/* Cockpit state: local markdown files for dashboards, task tracking, and agent status. */}}
+      "Read(/{{ $home }}/cockpit/state/**)",
+      "Edit(/{{ $home }}/cockpit/state/**)",
+      "Write(/{{ $home }}/cockpit/state/**)",
 {{/* ADO MCP read-only: sprint/iteration queries, backlog views, work item reads */}}
       "mcp__azure-devops__work_list_team_iterations",
       "mcp__azure-devops__work_list_iterations",
