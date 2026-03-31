@@ -74,7 +74,22 @@ else
     curl -fsSL https://claude.ai/install.sh | bash
 fi
 
-# --- 8. Bitwarden login ---
+# --- 8. Install Starship prompt ---
+
+if command -v starship &>/dev/null; then
+    echo "Starship is already installed."
+else
+    echo "Installing Starship ..."
+    sudo apt-get install -y -qq starship
+fi
+
+# Add starship init to .bashrc if not already present
+if ! grep -q 'starship init bash' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'eval "$(starship init bash)"' >> "$HOME/.bashrc"
+    echo "Added starship init to .bashrc."
+fi
+
+# --- 9. Bitwarden login ---
 
 echo "Checking Bitwarden status ..."
 bw_status=$(bw status 2>/dev/null | jq -r '.status' || echo "not-installed")
@@ -90,7 +105,7 @@ if [ "$bw_status" = "locked" ]; then
     export BW_SESSION
 fi
 
-# --- 9. Set up SSH agent bridge from Windows and configure SSH ---
+# --- 10. Set up SSH agent bridge from Windows and configure SSH ---
 
 mkdir -p "$HOME/.ssh"
 
@@ -119,7 +134,7 @@ else
     echo "WARNING: Could not find alexwaibelmsft key in SSH agent — make sure Bitwarden SSH agent is running."
 fi
 
-# --- 10. Symlink Windows .npmrc so WSL uses the same ADO feed tokens ---
+# --- 11. Symlink Windows .npmrc so WSL uses the same ADO feed tokens ---
 
 win_npmrc="/mnt/c/Users/$(whoami)/.npmrc"
 if [ -f "$win_npmrc" ]; then

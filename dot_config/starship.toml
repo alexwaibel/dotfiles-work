@@ -1,0 +1,78 @@
+# Gruvbox Dark themed Starship prompt
+
+palette = "gruvbox_dark"
+
+format = """
+$directory\
+$git_branch\
+$git_status\
+$nodejs\
+$python\
+$rust\
+$golang\
+$azure\
+$cmd_duration\
+$line_break\
+$character"""
+
+[directory]
+style = "bold fg:blue"
+truncation_length = 3
+
+[git_branch]
+format = "[$symbol$branch]($style) "
+style = "fg:purple"
+
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+style = "fg:red"
+
+[nodejs]
+format = "[$symbol($version)]($style) "
+style = "fg:green"
+
+[python]
+format = "[$symbol($version)]($style) "
+style = "fg:yellow"
+
+[rust]
+format = "[$symbol($version)]($style) "
+style = "fg:orange"
+
+[golang]
+format = "[$symbol($version)]($style) "
+style = "fg:aqua"
+
+[azure]
+disabled = false
+format = "[$symbol($subscription)]($style) "
+style = "fg:blue"
+
+[cmd_duration]
+format = "[$duration]($style) "
+style = "fg:gray"
+min_time = 2_000
+
+[character]
+success_symbol = "[>](bold fg:green)"
+error_symbol = "[>](bold fg:red)"
+
+[palettes.gruvbox_dark]
+black = "#282828"
+red = "#cc241d"
+green = "#98971a"
+yellow = "#d79921"
+blue = "#458588"
+purple = "#b16286"
+aqua = "#689d6a"
+gray = "#a89984"
+orange = "#d65d0e"
+bright-red = "#fb4934"
+bright-green = "#b8bb26"
+bright-yellow = "#fabd2f"
+bright-blue = "#83a598"
+bright-purple = "#d3869b"
+bright-aqua = "#8ec07c"
+white = "#ebdbb2"
+fg = "#ebdbb2"
+bg = "#282828"
