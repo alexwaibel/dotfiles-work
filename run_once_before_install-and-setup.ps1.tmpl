@@ -211,8 +211,34 @@ if (Test-Path $wtSettings) {
     }
     $wt.profiles.defaults | Add-Member -NotePropertyName colorScheme -NotePropertyValue 'Gruvbox Dark' -Force
 
+    # Add a Gruvbox Dark window theme for tab bar styling
+    $gruvboxTheme = [PSCustomObject]@{
+        name = 'Gruvbox Dark'
+        tab = [PSCustomObject]@{
+            background       = '#3C3836'
+            unfocusedBackground = '#1D2021'
+        }
+        tabRow = [PSCustomObject]@{
+            background = '#1D2021'
+        }
+        window = [PSCustomObject]@{
+            applicationTheme = 'dark'
+        }
+    }
+
+    # Ensure themes array exists
+    if (-not $wt.themes) {
+        $wt | Add-Member -NotePropertyName themes -NotePropertyValue @() -Force
+    }
+    if (-not ($wt.themes | Where-Object { $_.name -eq 'Gruvbox Dark' })) {
+        $wt.themes += $gruvboxTheme
+    }
+
+    # Set the theme
+    $wt | Add-Member -NotePropertyName theme -NotePropertyValue 'Gruvbox Dark' -Force
+
     $wt | ConvertTo-Json -Depth 100 | Set-Content $wtSettings -Encoding utf8
-    Write-Host 'Patched Windows Terminal with Gruvbox Dark color scheme.'
+    Write-Host 'Patched Windows Terminal with Gruvbox Dark color scheme and theme.'
 } else {
     Write-Warning "Windows Terminal settings.json not found at $wtSettings — skipping color scheme patch."
 }
