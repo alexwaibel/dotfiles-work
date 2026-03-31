@@ -118,9 +118,10 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 # --- 8. Add Starship init to PowerShell profiles (5.1 and 7+) ---
 
 $starshipInit = "if (Get-Command starship -ErrorAction SilentlyContinue) { Invoke-Expression (&starship init powershell) }"
+$myDocs = [Environment]::GetFolderPath('MyDocuments')
 $psProfiles = @(
-    "$env:USERPROFILE\Documents\WindowsPowerShell\profile.ps1"
-    "$env:USERPROFILE\Documents\PowerShell\profile.ps1"
+    "$myDocs\WindowsPowerShell\profile.ps1"
+    "$myDocs\PowerShell\profile.ps1"
 )
 
 foreach ($psProfile in $psProfiles) {
