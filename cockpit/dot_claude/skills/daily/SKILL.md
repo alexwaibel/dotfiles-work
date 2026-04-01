@@ -1,6 +1,6 @@
 ---
-name: review
-description: Daily review — unified dashboard of ADO sprint items and Logseq TODOs. Use when the user says "review", "daily review", "what's on my plate", "morning review", or "EOD review".
+name: daily
+description: Daily review — unified dashboard of ADO sprint items and Logseq TODOs. Use when the user says "daily", "daily review", "what's on my plate", "morning review", or "EOD review".
 allowed-tools:
   - Read
   - Write
