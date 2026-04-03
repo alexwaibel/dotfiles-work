@@ -68,10 +68,14 @@ Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs
 - `needs-spec` — Requirements unclear, needs human planning first
 - `needs-human` — Requires internal tooling/access an agent can't use
 
+## Ad-hoc Work
+
+All work — including ad-hoc tasks not from an existing sprint — follows the same cockpit conventions: correct ADO project/area/iteration from the config above, isolated worktrees for code changes, and state file updates. There is no "quick path" that bypasses these.
+
 ## Safety Rules
 - NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
 - NEVER run destructive git commands (reset --hard, clean -f, etc.) outside of worktrees
-- ALWAYS use isolated worktrees (via Agent tool with isolation: "worktree") for implementation
+- ALWAYS use isolated worktrees for implementation — agents create their own via `git worktree add` in the target repo
 - Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
 - Only open DRAFT PRs — never publish or merge
 - Never modify the user's current working tree or checked-out branch
