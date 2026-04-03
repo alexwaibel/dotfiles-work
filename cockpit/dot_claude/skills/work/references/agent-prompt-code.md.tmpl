@@ -8,9 +8,25 @@ You are working on ADO work item #<ID>: <TITLE>
 <Finalized plan from the planning phase — specific units, files, approach>
 
 ## Repository
-Working in: <repo path>
+Repo: <repo path>
 Branch: {{ .ado.branchPrefix }}<id>-<slug>
 Base: main (or master — check git)
+
+## Setup
+
+Create an isolated worktree before doing anything else:
+
+```bash
+cd <repo path>
+git fetch origin
+git worktree add .claude/worktrees/<id>-<slug> -b {{ .ado.branchPrefix }}<id>-<slug> origin/<base branch>
+```
+
+All subsequent work happens inside the worktree. Set your working directory:
+
+```bash
+cd <repo path>/.claude/worktrees/<id>-<slug>
+```
 
 ## Instructions
 
@@ -82,7 +98,7 @@ handle the browser work asynchronously.
 3. Continue with any remaining non-browser work. Do NOT block.
 
 ## Shell Commands
-- Your working directory is already set to the repo/worktree — do NOT use `cd`. Run git/yarn commands directly (e.g. `git status`, `yarn lint`).
+- After setup, your working directory is the worktree. Run git/yarn commands directly (e.g. `git status`, `yarn lint`).
 - NEVER chain commands with `&&` or `;` — run each as a separate Bash call.
 
 ## Safety

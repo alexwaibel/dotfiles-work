@@ -78,7 +78,7 @@ The goal is to maximize the chance an agent completes autonomously. Upfront disc
 10. **Post plan to ADO** — add a comment on the work item with the finalized plan (units, files, approach, risks, open questions). This creates a record of what was agreed and gives reviewers context.
 
 11. **Launch** — on user confirmation, for each approved item:
-    - **Code agents**: Read the agent prompt template from `~/cockpit/skills/work/references/agent-prompt-code.md`. Substitute placeholders (`<ID>`, `<TITLE>`, `<Full description from ADO>`, `<repo path>`, etc.) with actual values. Launch background Agent (isolation: "worktree", run_in_background: true). Create in-session task via TaskCreate. Update state -> `in-progress`, set Branch.
+    - **Code agents**: Read the agent prompt template from `~/cockpit/skills/work/references/agent-prompt-code.md`. Substitute placeholders (`<ID>`, `<TITLE>`, `<Full description from ADO>`, `<repo path>`, etc.) with actual values. Launch background Agent (run_in_background: true). The agent creates its own worktree as part of its Setup section. Create in-session task via TaskCreate. Update state -> `in-progress`, set Branch.
     - **Investigation agents**: Read the agent prompt template from `~/cockpit/skills/work/references/agent-prompt-investigate.md`. Substitute placeholders. Launch background Agent (run_in_background: true). Create in-session task. Update state -> `in-progress`.
     - **Deferred items**: Update state -> `blocked` or `skipped` with rationale.
 
