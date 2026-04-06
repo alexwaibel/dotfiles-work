@@ -8,13 +8,96 @@ My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo
 
 # Code Quality
 
-- **Verify types before proposing an approach.** Don't assume a property exists on a type — check the type definition first. This applies especially at system boundaries (e.g., Relay's `PayloadError` type doesn't expose `extensions` or `originalError` even though the runtime objects may have them).
-- **Find existing patterns first.** Before designing new infrastructure (error handling, toasts, data plumbing), search for how the codebase already handles the analogous success case or similar scenarios. Match the existing pattern rather than inventing a new one.
-- **Don't commit until the design is stable.** When a change touches multiple layers or involves uncertainty about how systems interact, work through the design questions before making incremental commits. Multiple design reversals create a messy git history and waste review effort.
-- **Push back when uncertain.** If you're not sure how a system behaves at a boundary (e.g., "does this framework preserve this field?"), say so and propose verifying it before committing to an approach. Implementing speculatively and discovering problems is more expensive than investigating first.
+- **Verify types before proposing an approach.** Don't assume a property exists on a type — check the type definition first, especially at system boundaries.
+- **Find existing patterns first.** Before designing new infrastructure, search for how the codebase already handles the analogous case. Match the existing pattern rather than inventing a new one.
+- **Don't commit until the design is stable.** When a change touches multiple layers or involves uncertainty about how systems interact, work through the design questions before making incremental commits.
+- **Push back when uncertain.** If you're not sure how a system behaves at a boundary, say so and propose verifying it before committing to an approach.
 
 # Kusto
 
 Default connection for KQL queries via the `azure-kusto` MCP server:
 - Cluster URI: `{{ .kusto.clusterUri }}`
 - Database: `{{ .kusto.database }}`
+
+# Cockpit — ADO Task Management Workflow
+
+## Session Startup
+1. Read ~/cockpit/state/ado-tasks.md for current task state
+2. If the file is empty or the Sprint ID is stale (sprint dates have passed), run `/standup` automatically
+3. If state exists, summarize: items tracked, in-progress/done/blocked counts
+
+## Available Commands
+- `/standup` — Fetch current sprint, reconcile state, report priorities
+- `/daily` — Daily review: unified dashboard of ADO items + Logseq TODOs, with triage recommendations
+- `/work [ID...]` — Assess fitness, plan, and launch agents for work items
+- `/status` — Check in-flight agents, update state, report progress
+- `/browser-queue` — List and manage pending browser tasks
+
+## ADO Config
+- Org: {{ .ado.org }}
+- Project: {{ .ado.project }}
+- Team: {{ .ado.team }}
+- Area Path: {{ .ado.areaPath }}
+
+## Repo Map
+| Repo | Local Path | ADO Project |
+|------|-----------|-------------|
+{{- range .ado.repos }}
+| {{ .name }} | {{ .path }} | {{ .adoProject }} |
+{{- end }}
+
+## Teams Notifications
+
+Agents post status updates to Teams via `az rest` (Graph API). No MCP server needed.
+
+- Team ID: `{{ .teams.teamId }}`
+- Channel ID: `{{ .teams.channelId }}`
+
+**Post a message:**
+```bash
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages" \
+  --headers "Content-Type=application/json" \
+  --body '{"body":{"contentType":"html","content":"<MESSAGE>"}}'
+```
+
+**Read recent messages:**
+```bash
+az rest --method GET \
+  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages?\$top=10"
+```
+
+## State File (~/cockpit/state/ado-tasks.md)
+
+Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs. ADO is the source of truth for everything else (priority, state, titles). Only the main cockpit session writes this file; agents never touch it.
+
+```markdown
+# Sprint State
+- Sprint: <name>
+- Sprint ID: <guid>
+- Last Updated: <ISO timestamp>
+
+## Work Items
+| ID | Status | Fitness | Branch | PR | Notes |
+|----|--------|---------|--------|----|-------|
+```
+
+**Status**: `queued` | `in-progress` | `done` | `blocked` | `skipped`
+**Fitness** (agent readiness — assessed during `/work`):
+- `ready` — Clear scope, agent can implement autonomously
+- `investigate` — Needs root-cause analysis first; agent can research but not fix
+- `needs-spec` — Requirements unclear, needs human planning first
+- `needs-human` — Requires internal tooling/access an agent can't use
+
+## Ad-hoc Work
+
+All work — including ad-hoc tasks not from an existing sprint — follows the same cockpit conventions: correct ADO project/area/iteration from the config above, isolated worktrees for code changes, and state file updates. There is no "quick path" that bypasses these.
+
+## Safety Rules
+- NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
+- NEVER run destructive git commands (reset --hard, clean -f, etc.) outside of worktrees
+- ALWAYS use isolated worktrees for implementation — agents create their own via `git worktree add` in the target repo
+- Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
+- Only open DRAFT PRs — never publish or merge
+- Never modify the user's current working tree or checked-out branch
+- State file (~/cockpit/state/ado-tasks.md) and browser queue (~/cockpit/state/browser-queue/) are the ONLY mutable paths the cockpit session and agents write to (besides agent worktrees)
