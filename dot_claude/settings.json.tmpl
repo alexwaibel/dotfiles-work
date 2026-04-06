@@ -142,6 +142,36 @@
       "mcp__azure-devops__wit_add_work_item_comment"
     ]
   },
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+{{/* Deny reads to the entire home directory, then punch holes for project dirs
+     and tooling config that Bash commands need (git, node, az, ssh). */}}
+      "denyRead": ["~/"],
+      "allowRead": [
+{{- range .ado.repos }}
+        "{{ $home }}/{{ .name }}",
+{{- end }}
+        "{{ $home }}/.local/share/chezmoi",
+        "{{ $home }}/cockpit",
+        "/mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq",
+        "{{ $home }}/.gitconfig",
+        "{{ $home }}/.ssh",
+        "{{ $home }}/.nvm",
+        "/tmp"
+      ],
+{{/* Deny writes everywhere, then allow only the directories agents actually modify. */}}
+      "denyWrite": ["/"],
+      "allowWrite": [
+{{- range .ado.repos }}
+        "{{ $home }}/{{ .name }}",
+{{- end }}
+        "{{ $home }}/.local/share/chezmoi",
+        "{{ $home }}/cockpit/state",
+        "/tmp"
+      ]
+    }
+  },
   "model": "opus[1m]",
   "statusLine": {
     "type": "command",
