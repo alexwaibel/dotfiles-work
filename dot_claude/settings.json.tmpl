@@ -157,10 +157,13 @@
         "/mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq",
         "{{ $home }}/.gitconfig",
         "{{ $home }}/.ssh",
+        "{{ $home }}/.azure",
         "{{ $home }}/.nvm",
         "/tmp"
       ],
-{{/* Deny writes everywhere, then allow only the directories agents actually modify. */}}
+{{/* Deny writes everywhere, then allow only the directories agents actually modify.
+     ~/.ssh is needed for SSH agent socket (SSH_AUTH_SOCK) communication during git push.
+     ~/.azure is needed for az CLI token cache and config. */}}
       "denyWrite": ["/"],
       "allowWrite": [
 {{- range .ado.repos }}
@@ -168,6 +171,8 @@
 {{- end }}
         "{{ $home }}/.local/share/chezmoi",
         "{{ $home }}/cockpit/state",
+        "{{ $home }}/.ssh/agent.sock",
+        "{{ $home }}/.azure",
         "/tmp"
       ]
     }
