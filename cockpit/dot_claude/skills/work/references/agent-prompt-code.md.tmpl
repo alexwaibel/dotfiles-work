@@ -54,8 +54,13 @@ cd <repo path>/.claude/worktrees/<id>-<slug>
    Score 0-100. If score < 80, fix issues before proceeding. Note the score in your PR description.
 
 6. Push branch and open a DRAFT PR with a descriptive title (no `AB#` prefix). Link the work item using `az repos pr create --work-items <ID>`.
-7. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
-8. Update ADO work item state to Active if currently Proposed
+7. **Clean up worktree** — the code now lives on the remote branch, so the local worktree is no longer needed:
+   ```bash
+   cd <repo path>
+   git worktree remove .claude/worktrees/<id>-<slug>
+   ```
+8. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
+9. Update ADO work item state to Active if currently Proposed
 
 ## Issue classification
 
