@@ -19,8 +19,10 @@ Create an isolated worktree before doing anything else:
 ```bash
 cd <repo path>
 git fetch origin
-git worktree add .claude/worktrees/<id>-<slug> -b {{ .ado.branchPrefix }}<id>-<slug> origin/<base branch>
+git worktree add .claude/worktrees/<id>-<slug> -b {{ .ado.branchPrefix }}<id>-<slug> origin/master
 ```
+
+Always branch from `origin/master` (or `origin/main` — check which exists) so you have the latest remote state. Never branch from the local `master` — it may be stale.
 
 All subsequent work happens inside the worktree. Set your working directory:
 
@@ -53,7 +55,14 @@ cd <repo path>/.claude/worktrees/<id>-<slug>
 
    Score 0-100. If score < 80, fix issues before proceeding. Note the score in your PR description.
 
-6. Push branch and open a DRAFT PR with a descriptive title (no `AB#` prefix). Link the work item using `az repos pr create --work-items <ID>`.
+6. Push branch and open a DRAFT PR:
+   a. Check the repo for PR conventions before creating. Look for:
+      - PR template (`.azuredevops/pull_request_template.md`, `.github/pull_request_template.md`)
+      - PR-related skills (e.g., `/create-pr`)
+      - PR instructions in the repo's CLAUDE.md
+   b. If a PR skill or template exists, use it — fill out all required sections.
+   c. If none exist, create a draft PR with a descriptive title (no `AB#` prefix) via `az repos pr create --work-items <ID>`.
+   d. Always: draft only, link work items, no `AB#` prefix in the title.
 7. **Clean up worktree** — the code now lives on the remote branch, so the local worktree is no longer needed:
    ```bash
    cd <repo path>

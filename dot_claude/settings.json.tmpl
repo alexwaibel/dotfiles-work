@@ -163,7 +163,8 @@
       ],
 {{/* Deny writes everywhere, then allow only the directories agents actually modify.
      ~/.ssh is needed for SSH agent socket (SSH_AUTH_SOCK) communication during git push.
-     ~/.azure is needed for az CLI token cache and config. */}}
+     ~/.azure is needed for az CLI token cache and config.
+     /run/WSL is needed for WSL-to-Windows interop sockets (e.g., git credential manager). */}}
       "denyWrite": ["/"],
       "allowWrite": [
 {{- range .ado.repos }}
@@ -173,6 +174,7 @@
         "{{ $home }}/cockpit/state",
         "{{ $home }}/.ssh/agent.sock",
         "{{ $home }}/.azure",
+        "/run/WSL",
         "/tmp"
       ]
     },
