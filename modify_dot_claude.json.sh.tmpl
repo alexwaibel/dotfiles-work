@@ -46,6 +46,10 @@ managed_servers='
   "playwright": {
     "command": "cmd",
     "args": ["/c", "npx", "-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--headless"]
+  },
+  "chrome-devtools": {
+    "command": "cmd",
+    "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--browser-url", "http://127.0.0.1:9222"]
   }
 }
 '
@@ -100,6 +104,10 @@ managed_servers='
   "playwright-mocked": {
     "command": "npx",
     "args": ["-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--cdp-endpoint", "http://127.0.0.1:9222"]
+  },
+  "chrome-devtools": {
+    "command": "npx",
+    "args": ["-y", "chrome-devtools-mcp@latest", "--browser-url", "http://127.0.0.1:9222"]
   }
 }
 '

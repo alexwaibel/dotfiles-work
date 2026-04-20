@@ -13,11 +13,53 @@ My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo
 - **Don't commit until the design is stable.** When a change touches multiple layers or involves uncertainty about how systems interact, work through the design questions before making incremental commits.
 - **Push back when uncertain.** If you're not sure how a system behaves at a boundary, say so and propose verifying it before committing to an approach.
 
+# Debugging
+
+When diagnosing a feature that's broken in a codebase where an analogous feature works correctly:
+
+- **Diff the broken surface against the working one first.** Structural comparison of JSX / props / wrapping components catches most bugs in minutes. Don't open library internals or propose config changes before doing this.
+- **One theory at a time.** If a hypothesized fix doesn't change behavior, discard the whole theory — don't patch it with new assumptions. Stacked epicycles waste hours and accumulate broken state.
+- **Verify fixes actually take effect before concluding "didn't work."** Vite HMR won't re-run app-init code like `createTabster`, `createRoot`, or singleton constructors captured in `useMemo`. Full reload may be required for the test to be valid.
+- **Commit verified progress before trying the next thing.** Don't stack multi-theory broken state that's hard to untangle. Small forward increments keep options open.
+
 # Kusto
 
 Default connection for KQL queries via the `azure-kusto` MCP server:
 - Cluster URI: `{{ .kusto.clusterUri }}`
 - Database: `{{ .kusto.database }}`
+
+# Chrome DevTools MCP
+
+Live DOM / focus / accessibility inspection via [`chrome-devtools-mcp`](https://github.com/ChromeDevTools/chrome-devtools-mcp), attached to the WSL-installed Google Chrome. Use when a UI bug (focus management, ARIA, etc.) can't be diagnosed from source alone.
+
+Running Chrome inside WSL (instead of bridging to the Windows install) keeps the whole debugging flow on one side of the WSL↔Windows boundary — no port-forwarding or host-IP resolution. The WSL Chrome profile is isolated from any Windows browser and is signed into the test tenant only.
+
+## One-time setup
+- `google-chrome` installed in WSL (Ubuntu `.deb` from Google is fine).
+- Register the MCP in Claude (user scope):
+  ```bash
+  claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --browser-url http://127.0.0.1:9222
+  ```
+
+## Per-session
+1. Launch Chrome (idempotent — no-op if the debug port is already answering):
+   ```bash
+   chrome-debug
+   ```
+   Script at `~/.local/bin/chrome-debug` runs `google-chrome --remote-debugging-port=9222 --user-data-dir=~/.cache/chrome-debug-profile`. WSLg surfaces the window in Windows automatically.
+2. Sign into the test tenant if prompted — credentials live in Bitwarden.
+3. Navigate to the page that exhibits the bug being diagnosed.
+4. Tell Claude "Chrome is ready" — Claude connects via the MCP at `http://127.0.0.1:9222`.
+
+## Safety
+- **Test tenant only.** Never sign into the WSL Chrome with your real work account.
+- Close Chrome when the debugging session ends so the debugging port isn't left open.
+- Every MCP tool call prompts for approval — review anything that looks like it's executing JS against sensitive state.
+- Browser state stays in `~/.cache/chrome-debug-profile`, isolated from any other browser profile.
+
+## Iframe debugging
+- `press_key` via CDP doesn't reliably deliver Tab (and likely other keys) into focused iframe content. For keyboard-behavior tests, dispatch a synthetic `KeyboardEvent` via `evaluate_script`, or have the user drive the keyboard directly.
+- Cross-origin iframes (e.g. Teams hosting Neptune): parent-document access to `iframe.contentDocument` is blocked. Use element UIDs from `take_snapshot` instead — they work across frame boundaries when passed as `args` to `evaluate_script`, and `document.activeElement` inside the function resolves to the element's own frame.
 
 # Cockpit — ADO Task Management Workflow
 

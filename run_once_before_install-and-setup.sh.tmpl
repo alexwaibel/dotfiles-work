@@ -8,7 +8,10 @@ set -euo pipefail
 # --- 1. Install apt packages ---
 
 sudo apt-get update -qq
-sudo apt-get install -y -qq curl jq unzip socat bubblewrap
+# libnss3-tools provides certutil, needed for mkcert to install its root CA
+# into Chrome's NSS store — required for WSL Chrome to trust Neptune's dev
+# cert (see Chrome DevTools MCP section of ~/.claude/CLAUDE.md).
+sudo apt-get install -y -qq curl jq unzip socat bubblewrap libnss3-tools
 
 # --- 2. Install nvm and Node.js LTS ---
 

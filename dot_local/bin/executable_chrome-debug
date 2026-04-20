@@ -1,0 +1,41 @@
+#!/bin/bash
+# Launch the WSL-installed Google Chrome with remote debugging enabled and an
+# isolated user-data-dir so Claude's chrome-devtools MCP can attach via
+# http://127.0.0.1:9222. The whole thing runs inside WSL — no Windows bridge.
+#
+# See ~/.claude/CLAUDE.md "Chrome DevTools MCP" section for context.
+
+set -e
+
+PORT=9222
+
+if curl --silent --fail --max-time 2 "http://127.0.0.1:${PORT}/json/version" > /dev/null 2>&1; then
+  echo "Chrome debug port ${PORT} already responding. Not relaunching."
+  exit 0
+fi
+
+# Isolated profile so cookies/tokens stay separate from any other Chrome use.
+PROFILE_DIR="${HOME}/.cache/chrome-debug-profile"
+mkdir -p "${PROFILE_DIR}"
+
+# Disown so Chrome stays alive after the script returns. We rely on the
+# vite-plugin-mkcert root CA being installed into WSL's NSS trust store
+# (see README step 2 + `CAROOT=~/.vite-plugin-mkcert mkcert -install`).
+google-chrome \
+  --remote-debugging-port="${PORT}" \
+  --user-data-dir="${PROFILE_DIR}" \
+  >/dev/null 2>&1 &
+disown
+
+echo "Launched Chrome (port ${PORT}). Waiting for CDP..."
+
+for _ in $(seq 1 30); do
+  if curl --silent --fail --max-time 1 "http://127.0.0.1:${PORT}/json/version" > /dev/null 2>&1; then
+    echo "Chrome debug port is ready."
+    exit 0
+  fi
+  sleep 0.5
+done
+
+echo "Chrome launched but debug port did not respond within 15s." >&2
+exit 1
