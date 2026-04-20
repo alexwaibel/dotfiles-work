@@ -13,14 +13,37 @@ My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo
 - **Don't commit until the design is stable.** When a change touches multiple layers or involves uncertainty about how systems interact, work through the design questions before making incremental commits.
 - **Push back when uncertain.** If you're not sure how a system behaves at a boundary, say so and propose verifying it before committing to an approach.
 
+# Session Startup
+
+When the user references a feature, bug, or work item at the start of a session, research **before** asking "do you have context?" — most of what you need is already recorded:
+
+1. Check auto-memory at `~/.claude/projects/-home-alwaibel/memory/` for matching active-work entries, session-handoff notes, or project memories.
+2. Check `~/cockpit/state/ado-tasks.md` for matching work item IDs or branch names.
+3. Grep recent commits (`git log --oneline -20`) on the current branch for matching keywords.
+4. List worktrees (`git worktree list`) for matching branch names.
+
+Summarize what you found and confirm, instead of starting from scratch.
+
+# Session Handoff
+
+When a session is ending, or the context window is getting long and might compact:
+
+1. Save a handoff note at `~/.claude/projects/-home-alwaibel/memory/session-handoff.md` with:
+   - **Last verified working state** — what's committed, what's on which branch, what was just confirmed to work by the user
+   - **Open theories that failed** — hypotheses tried and ruled out, with the evidence that ruled them out (so future-you doesn't retread)
+   - **Explicit "do not repeat"** — dead ends, premature optimizations, approaches the user already rejected
+2. Overwrite (don't append) — the handoff should reflect the latest state, not the whole history.
+3. At the next session start, read and summarize it before touching the task.
+
 # Debugging
 
-When diagnosing a feature that's broken in a codebase where an analogous feature works correctly:
+When diagnosing a bug in a feature that has an analogous *working* feature in the same codebase, this is a **hard gate**:
 
-- **Diff the broken surface against the working one first.** Structural comparison of JSX / props / wrapping components catches most bugs in minutes. Don't open library internals or propose config changes before doing this.
-- **One theory at a time.** If a hypothesized fix doesn't change behavior, discard the whole theory — don't patch it with new assumptions. Stacked epicycles waste hours and accumulate broken state.
-- **Verify fixes actually take effect before concluding "didn't work."** Vite HMR won't re-run app-init code like `createTabster`, `createRoot`, or singleton constructors captured in `useMemo`. Full reload may be required for the test to be valid.
-- **Commit verified progress before trying the next thing.** Don't stack multi-theory broken state that's hard to untangle. Small forward increments keep options open.
+1. **First output is a structural diff of the two features.** JSX, props, wrapping components, imports, config — compare the broken surface against the working one side-by-side and list the concrete differences. Do not open library internals, do not propose config changes, do not theorize about root causes before this diff exists. If there's no working analog, ask the user for one; don't dive deep without one.
+2. **One theory at a time.** If a hypothesized fix doesn't change behavior, discard the whole theory — don't patch it with new assumptions. Stacked epicycles waste hours and accumulate broken state.
+3. **Verify fixes actually take effect before concluding "didn't work."** Vite HMR won't re-run app-init code like `createTabster`, `createRoot`, or singleton constructors captured in `useMemo`. Full reload may be required for the test to be valid.
+4. **Commit verified progress before trying the next thing.** Don't stack multi-theory broken state that's hard to untangle. Small forward increments keep options open.
+5. **After two failed theories, stop and ask for a hint.** Don't silently stack theory three. Articulate what you tried, what you know, and ask the user for a fresh angle.
 
 # Kusto
 
