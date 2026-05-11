@@ -2,7 +2,7 @@
 
 My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo is at `~/.local/share/chezmoi/`.
 
-- When modifying config files that chezmoi manages (e.g. `~/.claude.json`, `~/.claude/settings.json`), always update the **chezmoi source** (the template/file under `~/.local/share/chezmoi/`) rather than editing the target file directly.
+- When modifying config files that chezmoi manages (e.g. `~/.copilot/settings.json`, `~/.copilot/mcp-config.json`), always update the **chezmoi source** (the template/file under `~/.local/share/chezmoi/`) rather than editing the target file directly.
 - After updating chezmoi source files, run `chezmoi apply --force` to apply changes.
 - Files ending in `.tmpl` are Go templates — chezmoi renders them using data from `.chezmoidata.*` and `chezmoi.toml`.
 
@@ -17,7 +17,7 @@ My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo
 
 When the user references a feature, bug, or work item at the start of a session, research **before** asking "do you have context?" — most of what you need is already recorded:
 
-1. Check auto-memory at `~/.claude/projects/-home-alwaibel/memory/` for matching active-work entries, session-handoff notes, or project memories.
+1. Check session notes at `~/.copilot/notes/` for matching active-work entries, session-handoff notes, or project notes.
 2. Check `~/cockpit/state/ado-tasks.md` for matching work item IDs or branch names.
 3. Grep recent commits (`git log --oneline -20`) on the current branch for matching keywords.
 4. List worktrees (`git worktree list`) for matching branch names.
@@ -26,9 +26,9 @@ Summarize what you found and confirm, instead of starting from scratch.
 
 # Session Handoff
 
-When a session is ending, or the context window is getting long and might compact:
+When a session is ending, or context is getting long:
 
-1. Save a handoff note at `~/.claude/projects/-home-alwaibel/memory/session-handoff.md` with:
+1. Save a handoff note at `~/.copilot/notes/session-handoff.md` with:
    - **Last verified working state** — what's committed, what's on which branch, what was just confirmed to work by the user
    - **Open theories that failed** — hypotheses tried and ruled out, with the evidence that ruled them out (so future-you doesn't retread)
    - **Explicit "do not repeat"** — dead ends, premature optimizations, approaches the user already rejected
@@ -59,10 +59,7 @@ Running Chrome inside WSL (instead of bridging to the Windows install) keeps the
 
 ## One-time setup
 - `google-chrome` installed in WSL (Ubuntu `.deb` from Google is fine).
-- Register the MCP in Claude (user scope):
-  ```bash
-  claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --browser-url http://127.0.0.1:9222
-  ```
+- The MCP server is declared in `~/.copilot/mcp-config.json` (managed by chezmoi); no manual registration needed.
 
 ## Per-session
 1. Launch Chrome (idempotent — no-op if the debug port is already answering):
@@ -72,12 +69,12 @@ Running Chrome inside WSL (instead of bridging to the Windows install) keeps the
    Script at `~/.local/bin/chrome-debug` runs `google-chrome --remote-debugging-port=9222 --user-data-dir=~/.cache/chrome-debug-profile`. WSLg surfaces the window in Windows automatically.
 2. Sign into the test tenant if prompted — credentials live in Bitwarden.
 3. Navigate to the page that exhibits the bug being diagnosed.
-4. Tell Claude "Chrome is ready" — Claude connects via the MCP at `http://127.0.0.1:9222`.
+4. Tell the assistant "Chrome is ready" — it connects via the MCP at `http://127.0.0.1:9222`.
 
 ## Safety
 - **Test tenant only.** Never sign into the WSL Chrome with your real work account.
 - Close Chrome when the debugging session ends so the debugging port isn't left open.
-- Every MCP tool call prompts for approval — review anything that looks like it's executing JS against sensitive state.
+- Review anything that looks like it's executing JS against sensitive state.
 - Browser state stays in `~/.cache/chrome-debug-profile`, isolated from any other browser profile.
 
 ## Iframe debugging
@@ -88,15 +85,16 @@ Running Chrome inside WSL (instead of bridging to the Windows install) keeps the
 
 ## Session Startup
 1. Read ~/cockpit/state/ado-tasks.md for current task state
-2. If the file is empty or the Sprint ID is stale (sprint dates have passed), run `/standup` automatically
+2. If the file is empty or the Sprint ID is stale (sprint dates have passed), run the `/standup` skill automatically
 3. If state exists, summarize: items tracked, in-progress/done/blocked counts
 
-## Available Commands
+## Available Skills
 - `/standup` — Fetch current sprint, reconcile state, report priorities
 - `/daily` — Daily review: unified dashboard of ADO items + Logseq TODOs, with triage recommendations
-- `/work [ID...]` — Assess fitness, plan, and launch agents for work items
-- `/status` — Check in-flight agents, update state, report progress
+- `/work [ID...]` — Plan implementation for work items (single-session walkthrough)
+- `/status` — Check current item status, update state, report progress
 - `/browser-queue` — List and manage pending browser tasks
+- `/verify-ui` — Visual verification of UI changes
 
 ## ADO Config
 - Org: {{ .ado.org }}
@@ -113,7 +111,7 @@ Running Chrome inside WSL (instead of bridging to the Windows install) keeps the
 
 ## Teams Notifications
 
-Agents post status updates to Teams via `az rest` (Graph API). No MCP server needed.
+Status updates can be posted to Teams via `az rest` (Graph API). No MCP server needed.
 
 - Team ID: `{{ .teams.teamId }}`
 - Channel ID: `{{ .teams.channelId }}`
@@ -134,7 +132,7 @@ az rest --method GET \
 
 ## State File (~/cockpit/state/ado-tasks.md)
 
-Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs. ADO is the source of truth for everything else (priority, state, titles). Only the main cockpit session writes this file; agents never touch it.
+Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs. ADO is the source of truth for everything else (priority, state, titles). Only the main cockpit session writes this file.
 
 ```markdown
 # Sprint State
@@ -148,9 +146,9 @@ Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs
 ```
 
 **Status**: `queued` | `in-progress` | `done` | `blocked` | `skipped`
-**Fitness** (agent readiness — assessed during `/work`):
-- `ready` — Clear scope, agent can implement autonomously
-- `investigate` — Needs root-cause analysis first; agent can research but not fix
+**Fitness** (readiness — assessed during `/work`):
+- `ready` — Clear scope, implementable in a single session
+- `investigate` — Needs root-cause analysis first
 - `needs-spec` — Requirements unclear, needs human planning first
 - `needs-human` — Requires internal tooling/access an agent can't use
 
@@ -161,8 +159,8 @@ All work — including ad-hoc tasks not from an existing sprint — follows the 
 ## Safety Rules
 - NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
 - NEVER run destructive git commands (reset --hard, clean -f, etc.) outside of worktrees
-- ALWAYS use isolated worktrees for implementation — agents create their own via `git worktree add` in the target repo
+- ALWAYS use isolated worktrees for implementation
 - Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
 - Only open DRAFT PRs — never publish or merge
 - Never modify the user's current working tree or checked-out branch
-- State file (~/cockpit/state/ado-tasks.md) and browser queue (~/cockpit/state/browser-queue/) are the ONLY mutable paths the cockpit session and agents write to (besides agent worktrees)
+- State file (~/cockpit/state/ado-tasks.md) and browser queue (~/cockpit/state/browser-queue/) are the ONLY mutable paths the cockpit session writes to (besides worktrees)

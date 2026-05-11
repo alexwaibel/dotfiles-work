@@ -1,15 +1,7 @@
 ---
 name: standup
 description: Fetch current sprint from ADO, reconcile with local state file, handle sprint rollover, flag priority issues, and report a summary of work items. Use when the user says "standup", "what's in my sprint", "sync ADO", or "sprint status".
-allowed-tools:
-  - Read
-  - Write
-  - Bash
-  - mcp__azure-devops__work_list_team_iterations
-  - mcp__azure-devops__wit_get_work_items_for_iteration
-  - mcp__azure-devops__wit_get_work_items_batch_by_ids
-  - mcp__azure-devops__wit_update_work_item
-  - mcp__azure-devops__wit_update_work_items_batch
+allowed-tools: shell
 ---
 
 # Standup

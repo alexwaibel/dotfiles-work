@@ -1,3 +1,10 @@
+{{/*
+  NOTE — Copilot CLI migration: this file was the prompt template fed to a
+  background Claude Code subagent during the autonomous /work flow. Copilot CLI
+  has no subagent system, so this template is currently dead code. It's kept
+  here as a reference for the workflow steps; the /work skill now walks through
+  these steps in the active session. Rework or delete in a follow-up.
+*/}}
 You are working on ADO work item #<ID>: <TITLE>
 
 ## Context
@@ -19,7 +26,7 @@ Create an isolated worktree before doing anything else:
 ```bash
 cd <repo path>
 git fetch origin
-git worktree add .claude/worktrees/<id>-<slug> -b {{ .ado.branchPrefix }}<id>-<slug> origin/master
+git worktree add .copilot/worktrees/<id>-<slug> -b {{ .ado.branchPrefix }}<id>-<slug> origin/master
 ```
 
 Always branch from `origin/master` (or `origin/main` — check which exists) so you have the latest remote state. Never branch from the local `master` — it may be stale.
@@ -27,12 +34,12 @@ Always branch from `origin/master` (or `origin/main` — check which exists) so 
 All subsequent work happens inside the worktree. Set your working directory:
 
 ```bash
-cd <repo path>/.claude/worktrees/<id>-<slug>
+cd <repo path>/.copilot/worktrees/<id>-<slug>
 ```
 
 ## Instructions
 
-1. Read the repo's CLAUDE.md for build/test/lint commands
+1. Read the repo's `AGENTS.md` (or `CLAUDE.md` if still present) for build/test/lint commands
 2. Run the full test suite. All tests MUST pass before you write any code. If tests fail on a clean checkout, stop and report the failures — do not proceed.
 3. Understand the codebase area relevant to this bug/task
 4. Work through the plan one unit at a time. For each unit:
@@ -59,14 +66,14 @@ cd <repo path>/.claude/worktrees/<id>-<slug>
    a. Check the repo for PR conventions before creating. Look for:
       - PR template (`.azuredevops/pull_request_template.md`, `.github/pull_request_template.md`)
       - PR-related skills (e.g., `/create-pr`)
-      - PR instructions in the repo's CLAUDE.md
+      - PR instructions in the repo's `AGENTS.md`/`CLAUDE.md`
    b. If a PR skill or template exists, use it — fill out all required sections.
    c. If none exist, create a draft PR with a descriptive title (no `AB#` prefix) via `az repos pr create --work-items <ID>`.
    d. Always: draft only, link work items, no `AB#` prefix in the title.
 7. **Clean up worktree** — the code now lives on the remote branch, so the local worktree is no longer needed:
    ```bash
    cd <repo path>
-   git worktree remove .claude/worktrees/<id>-<slug>
+   git worktree remove .copilot/worktrees/<id>-<slug>
    ```
 8. Post an ADO comment on the work item with: summary of changes, PR link, review score, open questions
 9. Update ADO work item state to Active if currently Proposed
@@ -88,22 +95,21 @@ az rest --method POST \
 
 ## Browser Queue (WSL <-> Windows handoff)
 When you need browser access (wiki, authenticated pages, UI verification), use the
-browser queue instead of blocking. This lets a Windows Claude session with `/chrome`
-handle the browser work asynchronously.
+browser queue instead of blocking. This lets a Windows session handle the browser
+work asynchronously.
 
 **Request a browser task:**
 1. Write a request file to `~/cockpit/state/browser-queue/<WI-ID>-<slug>.request.md`:
    ```markdown
    # Browser Request: WI#<ID>
    - Work Item: <ID>
-   - Agent Task: <task-id if available>
    - Created: <ISO timestamp>
 
    ## What I Need
    <Specific URL to visit, what to look for, what to extract or verify>
 
    ## Context
-   <Why this is needed — what the agent is trying to accomplish>
+   <Why this is needed — what you're trying to accomplish>
    ```
 2. Post to Teams:
    ```

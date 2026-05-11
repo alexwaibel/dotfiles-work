@@ -10,7 +10,7 @@ set -euo pipefail
 sudo apt-get update -qq
 # libnss3-tools provides certutil, needed for mkcert to install its root CA
 # into Chrome's NSS store — required for WSL Chrome to trust Neptune's dev
-# cert (see Chrome DevTools MCP section of ~/.claude/CLAUDE.md).
+# cert (see Chrome DevTools MCP section of ~/.copilot/copilot-instructions.md).
 sudo apt-get install -y -qq curl jq unzip socat bubblewrap libnss3-tools
 
 # --- 2. Install nvm and Node.js LTS ---
@@ -68,13 +68,14 @@ else
     curl -sSfL {{ .mcpTool.installUrl }} | sh -s {{ .mcpTool.command }}
 fi
 
-# --- 7. Install Claude Code ---
+# --- 7. Install GitHub Copilot CLI ---
+# Requires Node.js 22+ (provided by nvm LTS above).
 
-if command -v claude &>/dev/null; then
-    echo "Claude Code is already installed."
+if command -v copilot &>/dev/null; then
+    echo "GitHub Copilot CLI is already installed."
 else
-    echo "Installing Claude Code ..."
-    curl -fsSL https://claude.ai/install.sh | bash
+    echo "Installing GitHub Copilot CLI ..."
+    npm install -g @github/copilot
 fi
 
 # --- 8. Install Starship prompt ---
