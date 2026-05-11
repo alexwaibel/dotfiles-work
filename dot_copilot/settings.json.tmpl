@@ -1,0 +1,17 @@
+{{- /* GitHub Copilot CLI user settings — rendered by chezmoi.
+     Schema: https://docs.github.com/en/copilot/reference/hooks-configuration
+     Copilot CLI's settings surface is much smaller than Claude Code's: no permissions
+     allow-list, no sandbox, no statusLine. Tool approval is interactive or via the
+     --allow-tool / --deny-tool flags. Model is chosen at runtime via /model. */ -}}
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bash ~/.copilot/hooks/guard-git-push.sh",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
