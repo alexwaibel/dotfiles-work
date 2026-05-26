@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tests for guard-git-push.sh hook
-# Run: bash ~/.claude/hooks/guard-git-push.test.sh
+# Tests for guard-git-push.sh (Copilot CLI stdin format)
+# Run: bash ~/.copilot/hooks/guard-git-push.test.sh
 
 set -uo pipefail
 
@@ -8,15 +8,29 @@ HOOK="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/guard-git-push.sh"
 PASS=0
 FAIL=0
 
+# Build a Copilot-CLI-shaped stdin payload from a bash command
+payload() {
+  local cmd="$1"
+  jq -nc --arg cmd "$cmd" '
+    {
+      timestamp: 0,
+      cwd: "/tmp",
+      toolName: "bash",
+      toolArgs: ({command: $cmd} | tostring)
+    }
+  '
+}
+
 expect_allow() {
   local desc="$1" cmd="$2"
   local output exit_code
-  output=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$cmd\"}}" | bash "$HOOK" 2>&1) && exit_code=0 || exit_code=$?
-  if [[ $exit_code -eq 0 ]] && [[ "$output" != BLOCK* ]]; then
+  output=$(payload "$cmd" | bash "$HOOK" 2>&1) && exit_code=0 || exit_code=$?
+  # Allow = exit 0 with no "deny" decision in stdout
+  if [[ $exit_code -eq 0 ]] && [[ "$output" != *'"deny"'* ]]; then
     echo "  PASS: $desc"
     PASS=$((PASS + 1))
   else
-    echo "  FAIL: $desc (expected allow, got exit=$exit_code output='$output')"
+    echo "  FAIL: $desc (exit=$exit_code output='$output')"
     FAIL=$((FAIL + 1))
   fi
 }
@@ -24,12 +38,12 @@ expect_allow() {
 expect_block() {
   local desc="$1" cmd="$2"
   local output exit_code
-  output=$(echo "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$cmd\"}}" | bash "$HOOK" 2>&1) && exit_code=0 || exit_code=$?
-  if [[ $exit_code -ne 0 ]] || [[ "$output" == BLOCK* ]]; then
+  output=$(payload "$cmd" | bash "$HOOK" 2>&1) && exit_code=0 || exit_code=$?
+  if [[ "$output" == *'"deny"'* ]]; then
     echo "  PASS: $desc"
     PASS=$((PASS + 1))
   else
-    echo "  FAIL: $desc (expected block, got exit=$exit_code output='$output')"
+    echo "  FAIL: $desc (exit=$exit_code output='$output')"
     FAIL=$((FAIL + 1))
   fi
 }
@@ -64,7 +78,6 @@ echo "=== Non-push commands (should pass through) ==="
 expect_allow "ls"                        "ls -la"
 expect_allow "git status"                "git status"
 expect_allow "git pull"                  "git pull origin main"
-expect_allow "non-Bash tool"             "echo hello"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

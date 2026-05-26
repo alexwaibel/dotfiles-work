@@ -1,6 +1,6 @@
 # dotfiles
 
-> **Warning:** This repo is a personal chezmoi configuration that writes directly to your home directory. Running `chezmoi init --apply` will overwrite files like `~/.gitconfig`, `~/.claude.json`, and others. It also runs a bootstrap script that installs software and modifies system services. **Do not apply blindly** — review the source files and `.chezmoi.toml.tmpl` first, and use `chezmoi diff` to preview changes before applying.
+> **Warning:** This repo is a personal chezmoi configuration that writes directly to your home directory. Running `chezmoi init --apply` will overwrite files like `~/.gitconfig`, `~/.copilot/settings.json`, and others. It also runs a bootstrap script that installs software and modifies system services. **Do not apply blindly** — review the source files and `.chezmoi.toml.tmpl` first, and use `chezmoi diff` to preview changes before applying.
 
 Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io/) with secrets from [Bitwarden](https://bitwarden.com/). Works on both Windows and WSL/Linux.
 
@@ -9,7 +9,6 @@ Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io
 - **Windows**: Windows 11 with winget
 - **WSL/Linux**: Ubuntu (or Debian-based distro)
 - A Bitwarden account with the following vault entries:
-  - **"Claude API Key"** — custom field `apiKey` containing your Anthropic API key
   - **"GitHub SSH Key"** — SSH Key item (native type) for GitHub auth
 
 ## New Machine Bootstrap
@@ -47,8 +46,8 @@ If you're already logged in but locked, use `bw unlock --raw` instead of `bw log
 This will:
 - Prompt for your corporate email, Azure AD tenant ID, and ADO config (stored locally, only asked once)
 - Run the platform-specific bootstrap script which installs:
-  - **Windows**: Bitwarden (desktop + CLI), Azure CLI, nvm-windows, Node.js LTS, WSL with Ubuntu, Claude Code — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
-  - **Linux/WSL**: curl, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, Claude Code — via apt + native installers.
+  - **Windows**: Bitwarden (desktop + CLI), Azure CLI, nvm-windows, Node.js LTS, WSL with Ubuntu, GitHub Copilot CLI — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
+  - **Linux/WSL**: curl, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, GitHub Copilot CLI — via apt + native installers.
 - Prompt for Bitwarden login (if not already authenticated)
 - Extract the `alexwaibelmsft` SSH public key from the agent and configure `~/.ssh/config` so Git uses the correct key for GitHub
 - Switch the chezmoi repo remote from HTTPS to SSH

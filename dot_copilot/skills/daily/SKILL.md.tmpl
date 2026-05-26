@@ -1,21 +1,7 @@
 ---
 name: daily
 description: Daily review — unified dashboard of ADO sprint items and Logseq TODOs. Use when the user says "daily", "daily review", "what's on my plate", "morning review", or "EOD review".
-allowed-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Grep
-  - Glob
-  - mcp__azure-devops__work_list_team_iterations
-  - mcp__azure-devops__wit_get_work_items_for_iteration
-  - mcp__azure-devops__wit_get_work_items_batch_by_ids
-  - mcp__azure-devops__wit_my_work_items
-  - mcp__azure-devops__wit_get_work_item
-  - mcp__azure-devops__wit_create_work_item
-  - mcp__azure-devops__wit_add_child_work_items
-  - mcp__azure-devops__wit_update_work_item
+allowed-tools: shell
 ---
 
 # Review
@@ -27,16 +13,16 @@ Generate a unified daily dashboard combining ADO sprint items and Logseq TODOs.
 - Logseq journals: `/mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq/journals/`
 - Logseq format: org-mode (`.org` files), TODO markers: `* TODO`, `** TODO`, `*** TODO`, `* DOING`
 - Dashboard output: `~/cockpit/state/daily-dashboard.md`
-- ADO config: see `~/cockpit/CLAUDE.md` for org/project/team
+- ADO config: see `~/.copilot/copilot-instructions.md` for org/project/team
 
 ## Procedure
 
 ### 1. Gather ADO items
 
-1. Fetch current iteration: `work_list_team_iterations` (project: MSTeams, team: Workflows App, timeframe: current)
+1. Fetch current iteration: `work_list_team_iterations` (project: {{ .ado.project }}, team: {{ .ado.team }}, timeframe: current)
 2. Fetch sprint work items: `wit_get_work_items_for_iteration`
 3. Batch-fetch details: `wit_get_work_items_batch_by_ids` (fields: Id, Title, State, WorkItemType, Priority, Tags, IterationPath)
-4. Filter to items assigned to alwaibel@microsoft.com
+4. Filter to items assigned to {{ .email }}
 5. Also fetch `wit_my_work_items` to catch items assigned but not in current sprint
 
 ### 2. Gather Logseq TODOs
