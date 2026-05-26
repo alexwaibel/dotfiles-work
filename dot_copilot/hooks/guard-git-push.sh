@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copilot CLI preToolUse hook: blocks `git push` to any branch outside
-# alwaibel/claude/*.
+# alwaibel/agent/*.
 #
 # Stdin schema (Copilot CLI):
 #   {"timestamp": <ms>, "cwd": "...", "toolName": "bash", "toolArgs": "<json-string>"}
@@ -52,10 +52,10 @@ for token in $PUSH_CMD; do
 done
 
 if [[ ${#ARGS[@]} -lt 2 ]]; then
-  deny "Bare 'git push' without an explicit branch is not allowed. Specify the branch, e.g. git push origin alwaibel/claude/<id>-<slug>"
+  deny "Bare 'git push' without an explicit branch is not allowed. Specify the branch, e.g. git push origin alwaibel/agent/<id>-<slug>"
 fi
 
-ALLOWED_PREFIX="alwaibel/claude/"
+ALLOWED_PREFIX="alwaibel/agent/"
 
 for ((i=1; i<${#ARGS[@]}; i++)); do
   ref="${ARGS[$i]}"
@@ -63,11 +63,11 @@ for ((i=1; i<${#ARGS[@]}; i++)); do
   if [[ "$ref" == *:* ]]; then
     dest="${ref#*:}"
     if [[ "$dest" != "${ALLOWED_PREFIX}"* ]]; then
-      deny "Refspec destination '$dest' is not under '${ALLOWED_PREFIX}*'. Pushes are only allowed to alwaibel/claude/* branches."
+      deny "Refspec destination '$dest' is not under '${ALLOWED_PREFIX}*'. Pushes are only allowed to alwaibel/agent/* branches."
     fi
   else
     if [[ "$ref" != "${ALLOWED_PREFIX}"* ]]; then
-      deny "Branch '$ref' is not under '${ALLOWED_PREFIX}*'. Pushes are only allowed to alwaibel/claude/* branches."
+      deny "Branch '$ref' is not under '${ALLOWED_PREFIX}*'. Pushes are only allowed to alwaibel/agent/* branches."
     fi
   fi
 done
