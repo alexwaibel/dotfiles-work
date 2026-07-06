@@ -1,8 +1,13 @@
 {{- /* GitHub Copilot CLI user settings — rendered by chezmoi.
-     Schema: https://docs.github.com/en/copilot/reference/hooks-configuration
-     Copilot CLI's settings surface is much smaller than Claude Code's: no permissions
-     allow-list, no sandbox, no statusLine. Tool approval is interactive or via the
-     --allow-tool / --deny-tool flags. Model is chosen at runtime via /model. */ -}}
+     Sandbox schema (top-level "sandbox" key -> SandboxConfig):
+       enabled, addCurrentWorkingDirectory, allowBypass,
+       userPolicy.filesystem { readwritePaths, readonlyPaths, deniedPaths, clearPolicyOnExit },
+       userPolicy.network    { allowOutbound, allowLocalNetwork, allowedHosts, blockedHosts }
+     Sandboxing confines Copilot-run shell commands (restricted FS/network), so they run
+     without per-command approval prompts. Toggle live with /sandbox enable|disable or /sandbox.
+     `allowedUrls` is a SEPARATE layer: it pre-approves URLs for the built-in fetch tool, not
+     the sandbox. model/effortLevel/contextTier/colorMode/footer are also written at runtime via
+     the /model, /settings and footer UIs; they live here so `chezmoi apply` stays lossless. */ -}}
 {
   "version": 1,
   "hooks": {
@@ -13,5 +18,53 @@
         "timeoutSec": 5
       }
     ]
-  }
+  },
+  "sandbox": {
+    "enabled": true,
+    "addCurrentWorkingDirectory": true,
+    "allowBypass": true,
+    "userPolicy": {
+      "filesystem": {
+        "readwritePaths": [
+          "/tmp",
+          "{{ .chezmoi.homeDir }}/.cache",
+          "{{ .chezmoi.homeDir }}/.npm"
+        ],
+        "readonlyPaths": [
+          "{{ .chezmoi.homeDir }}/.nvm"
+        ],
+        "deniedPaths": [
+          "{{ .chezmoi.homeDir }}/.ssh",
+          "{{ .chezmoi.homeDir }}/.aws"
+        ],
+        "clearPolicyOnExit": true
+      },
+      "network": {
+        "allowOutbound": true,
+        "allowLocalNetwork": true
+      }
+    }
+  },
+  "footer": {
+    "showModelEffort": true,
+    "showDirectory": true,
+    "showBranch": true,
+    "showContextWindow": true,
+    "showQuota": false,
+    "showAiUsed": true,
+    "showAgent": true,
+    "showCodeChanges": false,
+    "showUsername": false,
+    "showSandbox": true,
+    "showCustom": true
+  },
+  "model": "claude-opus-4.8",
+  "effortLevel": "high",
+  "contextTier": "long_context",
+  "allowedUrls": [
+    "https://learn.microsoft.com",
+    "https://docs.github.com",
+    "https://eng.ms"
+  ],
+  "colorMode": "default"
 }
