@@ -1,0 +1,21 @@
+# WSL-specific shell customizations (managed by chezmoi).
+# Sourced from ~/.bashrc so WSL-only tweaks stay out of the distro-provided
+# ~/.bashrc. Add future WSL-only shell customizations here.
+
+# Drop Windows PATH dirs this Linux user can't read. WSL appendWindowsPath
+# mirrors the Windows PATH verbatim (incl. the ACL-locked
+# 'Program Files\WindowsApps' and other users' profile dirs). The Copilot
+# sandbox can't delegate those as readonly paths and aborts setup. Remove
+# unreadable /mnt/c entries here; readable Windows tool dirs are kept.
+if [ -n "$PATH" ]; then
+  _clean=""
+  while IFS= read -r _p; do
+    [ -z "$_p" ] && continue
+    case "$_p" in
+      /mnt/c/*) [ -r "$_p" ] || continue ;;
+    esac
+    _clean="${_clean:+$_clean:}$_p"
+  done < <(printf '%s' "$PATH" | tr ':' '\n')
+  export PATH="$_clean"
+  unset _clean _p
+fi
