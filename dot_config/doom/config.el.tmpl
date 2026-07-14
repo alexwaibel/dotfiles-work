@@ -1,0 +1,33 @@
+;;; config.el -*- lexical-binding: t; -*-
+
+;; Personal Doom configuration, managed by chezmoi (rendered from config.el.tmpl).
+;; Loaded after all modules. See `SPC h d v` to inspect any variable set here.
+
+(setq user-full-name "{{ .name }}"
+      user-mail-address "{{ .email }}")
+
+;; --- Notes / org-roam ------------------------------------------------------
+;;
+;; Notes live in the existing Logseq folder on OneDrive so the ~180 journals and
+;; pages accumulated in Logseq carry over unchanged, and stay synced across
+;; devices via OneDrive (we're migrating off Logseq's DB backend, not the notes).
+;; Logseq already stored everything as plain `.org`, so no conversion is needed.
+(setq org-directory "/mnt/c/Users/{{ .chezmoi.username }}/OneDrive - Microsoft/Documents/logseq/")
+
+(setq org-roam-directory org-directory
+      ;; Daily journals sit next to the old Logseq journals.
+      org-roam-dailies-directory "journals/")
+
+(after! org-roam
+  ;; Emacs 29 ships with SQLite built in, so org-roam needs no native emacsql
+  ;; binary. Force the builtin connector to avoid the legacy compile path.
+  (setq org-roam-database-connector 'sqlite-builtin
+        ;; Keep the binary DB OFF OneDrive — a cloud-synced sqlite file churns
+        ;; constantly and risks corruption. Rebuildable cache, so local is fine.
+        org-roam-db-location (expand-file-name "org-roam.db" doom-cache-dir)
+        ;; New dailies match Logseq's `YYYY_MM_DD.org` naming so old and new
+        ;; journals interleave cleanly in the same directory.
+        org-roam-dailies-capture-templates
+        '(("d" "default" entry "* %?"
+           :target (file+head "%<%Y_%m_%d>.org"
+                              "#+title: %<%Y-%m-%d>\n")))))
