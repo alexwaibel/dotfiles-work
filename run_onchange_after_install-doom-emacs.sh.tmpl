@@ -36,12 +36,15 @@ fi
 if [ ! -d "$EMACS_DIR" ]; then
     echo "Cloning Doom Emacs into $EMACS_DIR ..."
     git clone --depth 1 https://github.com/doomemacs/doomemacs "$EMACS_DIR"
-    "$DOOM_BIN" -y install --no-config --no-env --no-fonts
+    # `--force`/`-!` is a global flag (auto-accept prompts) and must precede the
+    # subcommand. --no-config leaves the chezmoi-managed ~/.config/doom intact;
+    # --no-env skips generating the optional envvars file.
+    "$DOOM_BIN" --force install --no-config --no-env
 fi
 
 # --- 3. Sync packages/config ---
 echo "Running doom sync ..."
-"$DOOM_BIN" -y sync
+"$DOOM_BIN" --force sync
 
 echo "Doom Emacs ready. Launch with 'emacs' (GUI via WSLg) or 'emacs -nw' (terminal)."
 echo "Install glyph fonts once with M-x nerd-icons-install-fonts if icons look off."
