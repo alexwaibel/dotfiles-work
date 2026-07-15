@@ -10,7 +10,7 @@
 
        :ui
        doom                    ; base theme + defaults
-       doom-dashboard          ; startup screen
+       dashboard               ; startup screen
        hl-todo                 ; highlight TODO/FIXME/etc.
        (ligatures +extra)      ; pretty ligatures where the font supports them
        modeline
@@ -48,7 +48,7 @@
 
        :lang
        emacs-lisp
-       (org +roam2)            ; org-mode + org-roam v2 (includes org-roam-dailies)
+       (org +roam)             ; org-mode + org-roam (includes org-roam-dailies)
        markdown
        sh
 

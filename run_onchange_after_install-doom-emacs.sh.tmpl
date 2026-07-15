@@ -19,10 +19,15 @@ DOOM_BIN="$EMACS_DIR/bin/doom"
 # emacs-pgtk is the native-Wayland build (best under WSLg) and, on Ubuntu 24.04,
 # ships Emacs 29 with built-in SQLite so org-roam needs no native emacsql binary.
 missing=()
-command -v emacs   >/dev/null 2>&1 || missing+=(emacs-pgtk)
-command -v rg      >/dev/null 2>&1 || missing+=(ripgrep)   # doom needs ripgrep
-command -v fdfind  >/dev/null 2>&1 || missing+=(fd-find)   # faster file searches
-command -v sqlite3 >/dev/null 2>&1 || missing+=(sqlite3)   # org-roam DB
+command -v emacs     >/dev/null 2>&1 || missing+=(emacs-pgtk)
+command -v rg        >/dev/null 2>&1 || missing+=(ripgrep)     # doom needs ripgrep
+command -v fdfind    >/dev/null 2>&1 || missing+=(fd-find)     # faster file searches
+command -v sqlite3   >/dev/null 2>&1 || missing+=(sqlite3)     # org-roam DB
+command -v dot       >/dev/null 2>&1 || missing+=(graphviz)    # org-roam graph views
+command -v shellcheck >/dev/null 2>&1 || missing+=(shellcheck) # :lang sh linting
+# fonts-symbola provides Symbola, Emacs' fallback glyph font (doom doctor warns
+# when it's absent). fc-list has no single "command" to probe, so check the font.
+fc-list 2>/dev/null | grep -qi symbola || missing+=(fonts-symbola)
 
 if [ ${#missing[@]} -gt 0 ]; then
     echo "Installing Emacs/Doom dependencies: ${missing[*]} ..."
