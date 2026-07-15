@@ -16,10 +16,13 @@ EMACS_DIR="$HOME/.config/emacs"
 DOOM_BIN="$EMACS_DIR/bin/doom"
 
 # --- 1. Install Emacs + Doom's runtime dependencies ---
-# emacs-pgtk is the native-Wayland build (best under WSLg) and, on Ubuntu 24.04,
-# ships Emacs 29 with built-in SQLite so org-roam needs no native emacsql binary.
+# emacs-gtk is the X11/GTK build. Under WSLg its window is scaled correctly by
+# the WSLg compositor (the pure-GTK/Wayland build renders at native pixel
+# density, which looks tiny on HiDPI) and it avoids the "pure-GTK under X"
+# selection-transfer warning. Ubuntu 24.04 ships Emacs 29 with built-in SQLite,
+# so org-roam needs no native emacsql binary.
 missing=()
-command -v emacs     >/dev/null 2>&1 || missing+=(emacs-pgtk)
+command -v emacs     >/dev/null 2>&1 || missing+=(emacs-gtk)
 command -v rg        >/dev/null 2>&1 || missing+=(ripgrep)     # doom needs ripgrep
 command -v fdfind    >/dev/null 2>&1 || missing+=(fd-find)     # faster file searches
 command -v sqlite3   >/dev/null 2>&1 || missing+=(sqlite3)     # org-roam DB
