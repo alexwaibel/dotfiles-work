@@ -6,6 +6,27 @@
 (setq user-full-name "{{ .name }}"
       user-mail-address "{{ .email }}")
 
+;; --- which-key (leader popup) ----------------------------------------------
+;;
+;; Current Doom (v3-dev on master) only wires up which-key when `which-key-mode`
+;; is fboundp *at byte-compile time* (`static-when` in lisp/doom-emacs.el),
+;; because it assumes which-key is built into Emacs 30.1+. Ubuntu 24.04 ships
+;; Emacs 29.3, where which-key is still an external package that isn't loaded at
+;; compile time — so Doom silently compiles the whole which-key setup out and the
+;; SPC leader popup never appears. Restore it ourselves. This is a no-op on
+;; Emacs 30+ (the hook is idempotent and the package is already active there).
+(when (require 'which-key nil t)
+  (setq which-key-sort-order #'which-key-key-order-alpha
+        which-key-sort-uppercase-first nil
+        which-key-add-column-padding 1
+        which-key-max-display-columns nil
+        which-key-min-display-lines 6
+        which-key-side-window-slot -10
+        which-key-idle-delay 0.4)
+  (add-hook 'doom-first-input-hook #'which-key-mode)
+  (after! which-key
+    (which-key-setup-side-window-bottom)))
+
 ;; --- Notes / org-roam ------------------------------------------------------
 ;;
 ;; Notes live in the existing Logseq folder on OneDrive so the ~180 journals and
