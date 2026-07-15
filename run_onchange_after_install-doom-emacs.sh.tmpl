@@ -35,11 +35,19 @@ fi
 # this run_onchange_after script executes, so --no-config avoids clobbering them.
 if [ ! -d "$EMACS_DIR" ]; then
     echo "Cloning Doom Emacs into $EMACS_DIR ..."
-    git clone --depth 1 https://github.com/doomemacs/doomemacs "$EMACS_DIR"
+    # Current Doom (v3-dev on master) keeps its ~150 modules in a git submodule
+    # (sources/doom+ -> doomemacs/modules). Without --recurse-submodules the
+    # module tree is empty, so `doom sync` finds no packages (no evil, org-roam,
+    # etc.). A full (non-shallow) clone also avoids the partial-checkout
+    # corruption an interrupted --depth 1 clone can leave behind.
+    git clone --recurse-submodules https://github.com/doomemacs/doomemacs "$EMACS_DIR"
     # `--force`/`-!` is a global flag (auto-accept prompts) and must precede the
     # subcommand. --no-config leaves the chezmoi-managed ~/.config/doom intact;
     # --no-env skips generating the optional envvars file.
     "$DOOM_BIN" --force install --no-config --no-env
+else
+    # Keep the modules submodule in step with the Doom checkout on every run.
+    git -C "$EMACS_DIR" submodule update --init --recursive
 fi
 
 # --- 3. Sync packages/config ---
