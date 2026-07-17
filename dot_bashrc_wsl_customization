@@ -19,3 +19,11 @@ if [ -n "$PATH" ]; then
   export PATH="$_clean"
   unset _clean _p
 fi
+
+# Put Doom Emacs' bin on PATH so `doom` (sync/doctor/upgrade) is available.
+if [ -d "$HOME/.config/emacs/bin" ]; then
+  case ":$PATH:" in
+    *":$HOME/.config/emacs/bin:"*) ;;
+    *) export PATH="$HOME/.config/emacs/bin:$PATH" ;;
+  esac
+fi

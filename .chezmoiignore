@@ -8,6 +8,9 @@ install-and-setup.ps1
 
 {{ if ne .chezmoi.os "linux" }}
 install-and-setup.sh
+install-doom-emacs.sh
 .ssh/agent-bridge.sh
 .local/bin/ado-npm-auth-wsl
+.config/doom
+.config/doom/**
 {{ end }}

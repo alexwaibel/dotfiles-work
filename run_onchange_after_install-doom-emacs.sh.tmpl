@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# chezmoi:template:left-delimiter="{{" right-delimiter="}}"
+# chezmoi run_onchange script — install Doom Emacs (WSL) and keep it in sync.
+#
+# Unlike the run_once bootstrap, this re-runs whenever its *rendered* content
+# changes. The config-file hashes embedded below mean that editing any Doom
+# config file forces a `doom sync` on the next `chezmoi apply`.
+#
+#   init.el     hash: {{ include "dot_config/doom/init.el" | sha256sum }}
+#   config.el   hash: {{ include "dot_config/doom/config.el.tmpl" | sha256sum }}
+#   packages.el hash: {{ include "dot_config/doom/packages.el" | sha256sum }}
+
+set -euo pipefail
+
+EMACS_DIR="$HOME/.config/emacs"
+DOOM_BIN="$EMACS_DIR/bin/doom"
+
+# --- 1. Install Emacs + Doom's runtime dependencies ---
+# emacs-gtk is the X11/GTK build. Under WSLg its window is scaled correctly by
+# the WSLg compositor (the pure-GTK/Wayland build renders at native pixel
+# density, which looks tiny on HiDPI) and it avoids the "pure-GTK under X"
+# selection-transfer warning. Ubuntu 24.04 ships Emacs 29 with built-in SQLite,
+# so org-roam needs no native emacsql binary.
+missing=()
+command -v emacs     >/dev/null 2>&1 || missing+=(emacs-gtk)
+command -v rg        >/dev/null 2>&1 || missing+=(ripgrep)     # doom needs ripgrep
+command -v fdfind    >/dev/null 2>&1 || missing+=(fd-find)     # faster file searches
+command -v sqlite3   >/dev/null 2>&1 || missing+=(sqlite3)     # org-roam DB
+command -v dot       >/dev/null 2>&1 || missing+=(graphviz)    # org-roam graph views
+command -v shellcheck >/dev/null 2>&1 || missing+=(shellcheck) # :lang sh linting
+# fonts-symbola provides Symbola, Emacs' fallback glyph font (doom doctor warns
+# when it's absent). fc-list has no single "command" to probe, so check the font.
+fc-list 2>/dev/null | grep -qi symbola || missing+=(fonts-symbola)
+
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "Installing Emacs/Doom dependencies: ${missing[*]} ..."
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq "${missing[@]}"
+fi
+
+# --- 2. Clone Doom Emacs and run the initial install ---
+# chezmoi has already written ~/.config/doom/{init,config,packages}.el before
+# this run_onchange_after script executes, so --no-config avoids clobbering them.
+if [ ! -d "$EMACS_DIR" ]; then
+    echo "Cloning Doom Emacs into $EMACS_DIR ..."
+    # Current Doom (v3-dev on master) keeps its ~150 modules in a git submodule
+    # (sources/doom+ -> doomemacs/modules). Without --recurse-submodules the
+    # module tree is empty, so `doom sync` finds no packages (no evil, org-roam,
+    # etc.). A full (non-shallow) clone also avoids the partial-checkout
+    # corruption an interrupted --depth 1 clone can leave behind.
+    git clone --recurse-submodules https://github.com/doomemacs/doomemacs "$EMACS_DIR"
+    # `--force`/`-!` is a global flag (auto-accept prompts) and must precede the
+    # subcommand. --no-config leaves the chezmoi-managed ~/.config/doom intact;
+    # --no-env skips generating the optional envvars file.
+    "$DOOM_BIN" --force install --no-config --no-env
+else
+    # Keep the modules submodule in step with the Doom checkout on every run.
+    git -C "$EMACS_DIR" submodule update --init --recursive
+fi
+
+# --- 3. Sync packages/config ---
+echo "Running doom sync ..."
+"$DOOM_BIN" --force sync
+
+echo "Doom Emacs ready. Launch with 'emacs' (GUI via WSLg) or 'emacs -nw' (terminal)."
+echo "Install glyph fonts once with M-x nerd-icons-install-fonts if icons look off."
