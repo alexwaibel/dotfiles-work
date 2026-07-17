@@ -48,7 +48,7 @@
 
        :lang
        emacs-lisp
-       (org +roam)             ; org-mode + org-roam (includes org-roam-dailies)
+       (org +roam +pretty)     ; org-mode + org-roam (includes org-roam-dailies)
        markdown
        sh
 
