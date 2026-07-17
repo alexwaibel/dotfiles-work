@@ -6,6 +6,13 @@
 (setq user-full-name "{{ .name }}"
       user-mail-address "{{ .email }}")
 
+;; --- Fonts -----------------------------------------------------------------
+;; WSLg exposes the display over XWayland at a flat 96 DPI regardless of the
+;; panel's real pixel density, so Emacs' default font renders tiny on a HiDPI
+;; screen. Pin an explicit size; live-adjust with SPC : then
+;; doom/increase-font-size, or bump :size here.
+(setq doom-font (font-spec :family "DejaVu Sans Mono" :size 16))
+
 ;; --- which-key (leader popup) ----------------------------------------------
 ;;
 ;; Current Doom (v3-dev on master) only wires up which-key when `which-key-mode`
