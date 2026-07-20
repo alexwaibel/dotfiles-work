@@ -54,8 +54,10 @@
         ;; constantly and risks corruption. Rebuildable cache, so local is fine.
         org-roam-db-location (expand-file-name "org-roam.db" doom-cache-dir)
         ;; New dailies match Logseq's `YYYY_MM_DD.org` naming so old and new
-        ;; journals interleave cleanly in the same directory.
+        ;; journals interleave cleanly in the same directory. The file-level
+        ;; :ID: makes each daily an org-roam node, which is required for links
+        ;; within it (e.g. to a Connect topic node) to register as backlinks.
         org-roam-dailies-capture-templates
         '(("d" "default" entry "* %?"
            :target (file+head "%<%Y_%m_%d>.org"
-                              "#+title: %<%Y-%m-%d>\n")))))
+                              ":PROPERTIES:\n:ID:       %(org-id-new)\n:END:\n#+title: %<%Y-%m-%d>\n")))))
