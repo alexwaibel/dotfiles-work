@@ -81,6 +81,29 @@ Running Chrome inside WSL (instead of bridging to the Windows install) keeps the
 - `press_key` via CDP doesn't reliably deliver Tab (and likely other keys) into focused iframe content. For keyboard-behavior tests, dispatch a synthetic `KeyboardEvent` via `evaluate_script`, or have the user drive the keyboard directly.
 - Cross-origin iframes (e.g. Teams hosting Neptune): parent-document access to `iframe.contentDocument` is blocked. Use element UIDs from `take_snapshot` instead — they work across frame boundaries when passed as `args` to `evaluate_script`, and `document.activeElement` inside the function resolves to the element's own frame.
 
+# Repo & Worktree Layout
+
+All git repositories and their worktrees live under `~/repos/`. This layout is fixed —
+apply it no matter which directory a session is launched from (including from inside a repo).
+
+- **Canonical clones:** `~/repos/<repo>` (e.g. `~/repos/teams-client-workflows`). These stay on
+  their default branch and are never edited directly.
+- **Worktrees:** `~/repos/worktrees/<repo>/<branch-slug>`
+  (e.g. `~/repos/worktrees/teams-client-workflows/5443403-tiny-fluentui-chunks`).
+
+Rules:
+- ALWAYS create worktrees at `~/repos/worktrees/<repo>/<branch-slug>`. **NEVER inside the repo
+  directory** (no `.agent-wt/`, no repo subdir) and never elsewhere in `$HOME` or `~/.cache`.
+  `<branch-slug>` is the branch name's final segment (the `<workitem-id>-<short-description>` part).
+- The sandbox grants read/write to `~/repos`, so git and agent commands run in worktrees (which
+  share the canonical repo's object store) without approval prompts.
+- Create with:
+  ```bash
+  git -C ~/repos/<repo> worktree add ~/repos/worktrees/<repo>/<slug> -b <branchPrefix><slug>
+  ```
+- Remove a finished worktree with `git -C ~/repos/<repo> worktree remove <path>` — don't `rm -rf`
+  the directory, which leaves a dangling registration needing `git worktree prune`.
+
 # Cockpit — ADO Task Management Workflow
 
 ## Session Startup
@@ -159,7 +182,7 @@ All work — including ad-hoc tasks not from an existing sprint — follows the 
 ## Safety Rules
 - NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
 - NEVER run destructive git commands (reset --hard, clean -f, etc.) outside of worktrees
-- ALWAYS use isolated worktrees for implementation
+- ALWAYS use isolated worktrees for implementation, created at `~/repos/worktrees/<repo>/<branch-slug>` (see **Repo & Worktree Layout**) — never inside the repo directory
 - Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
 - Only open DRAFT PRs — never publish or merge
 - Never modify the user's current working tree or checked-out branch

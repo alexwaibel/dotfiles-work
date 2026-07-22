@@ -17,7 +17,7 @@
 # Add more [[data.ado.repos]] blocks below for additional repos.
 [[data.ado.repos]]
     name = "{{ promptStringOnce $repo0 "name" "Repo name" }}"
-    path = "{{ promptStringOnce $repo0 "path" "Repo local path (e.g. ~/my-repo)" }}"
+    path = "{{ promptStringOnce $repo0 "path" "Repo local path (e.g. ~/repos/my-repo)" }}"
     adoProject = "{{ promptStringOnce $repo0 "adoProject" "ADO project containing this repo (may differ from the board project)" }}"
 
 {{- $mcpTool := dig "mcpTool" (dict) . }}

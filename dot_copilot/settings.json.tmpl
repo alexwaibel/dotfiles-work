@@ -27,6 +27,7 @@
       "filesystem": {
         "readwritePaths": [
           "/tmp",
+          "{{ .chezmoi.homeDir }}/repos",
           "{{ .chezmoi.homeDir }}/.cache",
           "{{ .chezmoi.homeDir }}/.npm"
         ],
