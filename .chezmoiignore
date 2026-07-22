@@ -10,6 +10,7 @@ install-and-setup.ps1
 install-and-setup.sh
 install-doom-emacs.sh
 .ssh/agent-bridge.sh
+.ssh-agent/known_hosts
 .local/bin/ado-npm-auth-wsl
 .config/doom
 .config/doom/**

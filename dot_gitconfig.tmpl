@@ -10,6 +10,11 @@
 	autocrlf = false
 {{- if eq .chezmoi.os "windows" }}
 	sshCommand = C:/Windows/System32/OpenSSH/ssh.exe
+{{- else }}
+	# known_hosts lives in ~/.ssh-agent (sandbox-readable) rather than ~/.ssh
+	# (sandbox-denied), so git ssh can verify hosts inside the Copilot CLI sandbox.
+	# Strict verification against the pre-seeded file; unknown hosts fail closed.
+	sshCommand = ssh -o UserKnownHostsFile=~/.ssh-agent/known_hosts -o StrictHostKeyChecking=yes
 {{- end }}
 
 [credential]
