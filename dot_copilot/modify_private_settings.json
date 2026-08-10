@@ -1,0 +1,51 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- $home := .chezmoi.homeDir -}}
+{{- $settings := .chezmoi.stdin | default "{}" | fromJson -}}
+{{- $settings = $settings | setValueAtPath "version" 1 -}}
+{{- $settings = $settings | setValueAtPath "hooks" (dict
+  "preToolUse" (list (dict
+    "type" "command"
+    "bash" "bash ~/.copilot/hooks/guard-git-push.sh"
+    "timeoutSec" 5
+  ))
+) -}}
+{{- $settings = $settings | setValueAtPath "sandbox" (dict
+  "enabled" true
+  "addCurrentWorkingDirectory" true
+  "allowBypass" true
+  "userPolicy" (dict
+    "filesystem" (dict
+      "readwritePaths" (list "/tmp" (printf "%s/repos" $home) (printf "%s/.ssh-agent" $home) (printf "%s/.cache" $home) (printf "%s/.npm" $home))
+      "readonlyPaths" (list (printf "%s/.nvm" $home))
+      "deniedPaths" (list (printf "%s/.ssh" $home) (printf "%s/.aws" $home))
+      "clearPolicyOnExit" true
+    )
+    "network" (dict
+      "allowOutbound" true
+      "allowLocalNetwork" true
+    )
+  )
+) -}}
+{{- $settings = $settings | setValueAtPath "footer" (dict
+  "showModelEffort" true
+  "showDirectory" true
+  "showBranch" true
+  "showContextWindow" true
+  "showQuota" false
+  "showAiUsed" true
+  "showAgent" true
+  "showCodeChanges" false
+  "showUsername" false
+  "showSandbox" true
+  "showCustom" true
+) -}}
+{{- $settings = $settings | setValueAtPath "model" "claude-opus-4.8" -}}
+{{- $settings = $settings | setValueAtPath "effortLevel" "high" -}}
+{{- $settings = $settings | setValueAtPath "contextTier" "long_context" -}}
+{{- $settings = $settings | setValueAtPath "allowedUrls" (list
+  "https://learn.microsoft.com"
+  "https://docs.github.com"
+  "https://eng.ms"
+) -}}
+{{- $settings = $settings | setValueAtPath "colorMode" "default" -}}
+{{ $settings | toPrettyJson }}
