@@ -34,6 +34,17 @@
   (after! which-key
     (which-key-setup-side-window-bottom)))
 
+;; --- Timezone ---------------------------------------------------------------
+;;
+;; This WSL distro runs on UTC (`/etc/localtime` -> Etc/UTC, no `TZ` set), which
+;; the sandbox/base image leaves unconfigured. org-roam's daily-journal capture
+;; stamps filenames with `%<%Y_%m_%d>` in *local* time, so an evening Pacific
+;; entry (after 16:00–17:00 PT) was rolling onto the next UTC day and landing in
+;; the wrong journal. Pin Emacs to Pacific; the zoneinfo name (not a fixed
+;; "PST8") so DST (PST/PDT) is handled automatically. Scoped to Emacs so we
+;; don't need root to touch the system clock.
+(setenv "TZ" "America/Los_Angeles")
+
 ;; --- Notes / org-roam ------------------------------------------------------
 ;;
 ;; Notes live in the existing Logseq folder on OneDrive so the ~180 journals and
@@ -42,9 +53,26 @@
 ;; Logseq already stored everything as plain `.org`, so no conversion is needed.
 (setq org-directory "/mnt/c/Users/{{ .chezmoi.username }}/OneDrive - Microsoft/Documents/logseq/")
 
+;; org-agenda-files defaults to just `org-directory`, and org only scans files
+;; *directly* inside a listed directory — it never recurses. Every Logseq note
+;; lives in the `journals/` and `pages/` subdirectories (the root itself has no
+;; .org files), so the default agenda scanned an empty folder and listed no
+;; TODOs. Point it at those two flat subdirectories instead; org re-expands the
+;; directory entries on every agenda build, so new journals appear automatically.
+(setq org-agenda-files (list (expand-file-name "journals/" org-directory)
+                             (expand-file-name "pages/" org-directory)))
+
 (setq org-roam-directory org-directory
       ;; Daily journals sit next to the old Logseq journals.
-      org-roam-dailies-directory "journals/")
+      org-roam-dailies-directory "journals/"
+      ;; org-roam scans `org-roam-directory` recursively, which sweeps in
+      ;; Logseq's internal `logseq/bak/` (150+ timestamped file backups) and
+      ;; `logseq/.recycle/` (deleted-page trash). Those are frozen snapshots
+      ;; from the Logseq era — parsing them on every db-sync is wasted work and
+      ;; pollutes file-level queries. Exclude the whole Logseq-internal dir.
+      ;; (Single alternation regexp so it works on older org-roam versions that
+      ;; take a string rather than a list.)
+      org-roam-file-exclude-regexp "/logseq/\\(bak\\|\\.recycle\\)/")
 
 (after! org-roam
   ;; Emacs 29 ships with SQLite built in, so org-roam needs no native emacsql
