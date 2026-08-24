@@ -39,8 +39,8 @@
   "showSandbox" true
   "showCustom" true
 ) -}}
-{{- $settings = $settings | setValueAtPath "model" "claude-opus-4.8" -}}
-{{- $settings = $settings | setValueAtPath "effortLevel" "high" -}}
+{{- $settings = $settings | setValueAtPath "model" "gpt-5.6-sol" -}}
+{{- $settings = $settings | setValueAtPath "effortLevel" "default" -}}
 {{- $settings = $settings | setValueAtPath "contextTier" "long_context" -}}
 {{- $settings = $settings | setValueAtPath "allowedUrls" (list
   "https://learn.microsoft.com"
