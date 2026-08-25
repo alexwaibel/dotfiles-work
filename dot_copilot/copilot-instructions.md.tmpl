@@ -13,27 +13,10 @@ My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo
 - **Don't commit until the design is stable.** When a change touches multiple layers or involves uncertainty about how systems interact, work through the design questions before making incremental commits.
 - **Push back when uncertain.** If you're not sure how a system behaves at a boundary, say so and propose verifying it before committing to an approach.
 
-# Session Startup
+# Cockpit and Session Notes
 
-When the user references a feature, bug, or work item at the start of a session, research **before** asking "do you have context?" — most of what you need is already recorded:
-
-1. Check session notes at `~/.copilot/notes/` for matching active-work entries, session-handoff notes, or project notes.
-2. Check `~/cockpit/state/ado-tasks.md` for matching work item IDs or branch names.
-3. Grep recent commits (`git log --oneline -20`) on the current branch for matching keywords.
-4. List worktrees (`git worktree list`) for matching branch names.
-
-Summarize what you found and confirm, instead of starting from scratch.
-
-# Session Handoff
-
-When a session is ending, or context is getting long:
-
-1. Save a handoff note at `~/.copilot/notes/session-handoff.md` with:
-   - **Last verified working state** — what's committed, what's on which branch, what was just confirmed to work by the user
-   - **Open theories that failed** — hypotheses tried and ruled out, with the evidence that ruled them out (so future-you doesn't retread)
-   - **Explicit "do not repeat"** — dead ends, premature optimizations, approaches the user already rejected
-2. Overwrite (don't append) — the handoff should reflect the latest state, not the whole history.
-3. At the next session start, read and summarize it before touching the task.
+Do not read or update `~/cockpit` or `~/.copilot/notes` unless the user explicitly
+invokes a cockpit-related skill or requests a session handoff.
 
 # Debugging
 
@@ -103,87 +86,3 @@ Rules:
   ```
 - Remove a finished worktree with `git -C ~/repos/<repo> worktree remove <path>` — don't `rm -rf`
   the directory, which leaves a dangling registration needing `git worktree prune`.
-
-# Cockpit — ADO Task Management Workflow
-
-## Session Startup
-1. Read ~/cockpit/state/ado-tasks.md for current task state
-2. If the file is empty or the Sprint ID is stale (sprint dates have passed), run the `/standup` skill automatically
-3. If state exists, summarize: items tracked, in-progress/done/blocked counts
-
-## Available Skills
-- `/standup` — Fetch current sprint, reconcile state, report priorities
-- `/daily` — Daily review: unified dashboard of ADO items + Logseq TODOs, with triage recommendations
-- `/work [ID...]` — Plan implementation for work items (single-session walkthrough)
-- `/status` — Check current item status, update state, report progress
-- `/browser-queue` — List and manage pending browser tasks
-- `/verify-ui` — Visual verification of UI changes
-
-## ADO Config
-- Org: {{ .ado.org }}
-- Project: {{ .ado.project }}
-- Team: {{ .ado.team }}
-- Area Path: {{ .ado.areaPath }}
-
-## Repo Map
-| Repo | Local Path | ADO Project |
-|------|-----------|-------------|
-{{- range .ado.repos }}
-| {{ .name }} | {{ .path }} | {{ .adoProject }} |
-{{- end }}
-
-## Teams Notifications
-
-Status updates can be posted to Teams via `az rest` (Graph API). No MCP server needed.
-
-- Team ID: `{{ .teams.teamId }}`
-- Channel ID: `{{ .teams.channelId }}`
-
-**Post a message:**
-```bash
-az rest --method POST \
-  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages" \
-  --headers "Content-Type=application/json" \
-  --body '{"body":{"contentType":"html","content":"<MESSAGE>"}}'
-```
-
-**Read recent messages:**
-```bash
-az rest --method GET \
-  --url "https://graph.microsoft.com/v1.0/teams/{{ .teams.teamId }}/channels/{{ .teams.channelId }}/messages?\$top=10"
-```
-
-## State File (~/cockpit/state/ado-tasks.md)
-
-Tracks only what ADO doesn't know — local agent status, fitness, branches, PRs. ADO is the source of truth for everything else (priority, state, titles). Only the main cockpit session writes this file.
-
-```markdown
-# Sprint State
-- Sprint: <name>
-- Sprint ID: <guid>
-- Last Updated: <ISO timestamp>
-
-## Work Items
-| ID | Status | Fitness | Branch | PR | Notes |
-|----|--------|---------|--------|----|-------|
-```
-
-**Status**: `queued` | `in-progress` | `done` | `blocked` | `skipped`
-**Fitness** (readiness — assessed during `/work`):
-- `ready` — Clear scope, implementable in a single session
-- `investigate` — Needs root-cause analysis first
-- `needs-spec` — Requirements unclear, needs human planning first
-- `needs-human` — Requires internal tooling/access an agent can't use
-
-## Ad-hoc Work
-
-All work — including ad-hoc tasks not from an existing sprint — follows the same cockpit conventions: correct ADO project/area/iteration from the config above, isolated worktrees for code changes, and state file updates. There is no "quick path" that bypasses these.
-
-## Safety Rules
-- NEVER modify, checkout, or force-push to any branch not prefixed with `{{ .ado.branchPrefix }}`
-- NEVER run destructive git commands (reset --hard, clean -f, etc.) outside of worktrees
-- ALWAYS use isolated worktrees for implementation, created at `~/repos/worktrees/<repo>/<branch-slug>` (see **Repo & Worktree Layout**) — never inside the repo directory
-- Branch naming: `{{ .ado.branchPrefix }}<workitem-id>-<short-description>`
-- Only open DRAFT PRs — never publish or merge
-- Never modify the user's current working tree or checked-out branch
-- State file (~/cockpit/state/ado-tasks.md) and browser queue (~/cockpit/state/browser-queue/) are the ONLY mutable paths the cockpit session writes to (besides worktrees)

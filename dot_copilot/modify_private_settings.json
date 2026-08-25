@@ -11,11 +11,19 @@
 ) -}}
 {{- $settings = $settings | setValueAtPath "sandbox" (dict
   "enabled" true
-  "addCurrentWorkingDirectory" true
+  "addCurrentWorkingDirectory" false
   "allowBypass" true
   "userPolicy" (dict
     "filesystem" (dict
-      "readwritePaths" (list "/tmp" (printf "%s/repos" $home) (printf "%s/.ssh-agent" $home) (printf "%s/.cache" $home) (printf "%s/.npm" $home))
+      "readwritePaths" (list
+        "/tmp"
+        (printf "%s/repos" $home)
+        (printf "%s/cockpit" $home)
+        (printf "%s/.copilot/notes" $home)
+        (printf "%s/.ssh-agent" $home)
+        (printf "%s/.cache" $home)
+        (printf "%s/.npm" $home)
+      )
       "readonlyPaths" (list (printf "%s/.nvm" $home))
       "deniedPaths" (list (printf "%s/.ssh" $home) (printf "%s/.aws" $home))
       "clearPolicyOnExit" true
