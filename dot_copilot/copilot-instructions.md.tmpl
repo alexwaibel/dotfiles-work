@@ -3,7 +3,8 @@
 My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo is at `~/.local/share/chezmoi/`.
 
 - When modifying config files that chezmoi manages (e.g. `~/.copilot/settings.json`, `~/.copilot/mcp-config.json`), always update the **chezmoi source** (the template/file under `~/.local/share/chezmoi/`) rather than editing the target file directly.
-- After updating chezmoi source files, run `chezmoi apply --force` to apply changes.
+- **Check for drift before making or applying changes.** Run `chezmoi status` and inspect `chezmoi diff` for the affected targets before editing the source. Reconcile unexplained target-side changes first—preserve intentional changes in the source (for example with `chezmoi re-add <target>`) or confirm they should be discarded. Never run `chezmoi apply --force` over unexplained drift.
+- After updating chezmoi source files and reconciling any drift, run `chezmoi apply --force` to apply changes.
 - Files ending in `.tmpl` are Go templates — chezmoi renders them using data from `.chezmoidata.*` and `chezmoi.toml`.
 
 # Code Quality
