@@ -20,6 +20,16 @@ The hub's backlinks are the living backlog — nothing to hand-curate.
 - Emacs helper: `capture-idea.el` in this skill dir (loaded via emacsclient).
 - Emacs owns node creation; the AI only authors the idea body.
 
+## Sandbox (important)
+
+The notes graph lives on a OneDrive mount that is **outside the sandbox by design**.
+**Every** step that touches it — reads, writes, copying into `assets/`, AND running the
+`emacsclient` helper (the Emacs daemon's own file access is blocked too) — requires sandbox
+bypass. Symptom when you forget: commands hang or files appear "missing"/unwritable; these are
+sandbox denials, not real failures, so do not treat a missing-file result as capture failure —
+re-check with bypass. The mount is case-insensitive, so the lowercase `logseq/` in Doom's
+`config.el` resolves fine against the real `Logseq/` dir.
+
 ## Division of labour (important)
 
 - **Emacs/org-roam** create the node: `:ID:`, `#+title`, slug filename, DB registration,
