@@ -24,7 +24,10 @@
         (printf "%s/.cache" $home)
         (printf "%s/.npm" $home)
       )
-      "readonlyPaths" (list (printf "%s/.nvm" $home))
+      "readonlyPaths" (list
+        (printf "%s/.nvm" $home)
+        "/proc/sys/kernel/random/uuid"
+      )
       "deniedPaths" (list (printf "%s/.ssh" $home) (printf "%s/.aws" $home))
       "clearPolicyOnExit" true
     )
@@ -54,6 +57,7 @@
   "https://learn.microsoft.com"
   "https://docs.github.com"
   "https://eng.ms"
+  "https://westus2-2.in.applicationinsights.azure.com"
 ) -}}
 {{- $settings = $settings | setValueAtPath "colorMode" "default" -}}
 {{ $settings | toPrettyJson }}
