@@ -61,43 +61,43 @@
 {{- else }}
     "azure-devops": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "ado", "--org", "{{ .ado.org }}", "--toolsets", "all"],
       "tools": ["*"]
     },
     "azure-kusto": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "kusto-native", "--service-uri", "{{ .kusto.clusterUri }}", "--database", "{{ .kusto.database }}"],
       "tools": ["*"]
     },
     "icm": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "icm"],
       "tools": ["*"]
     },
     "enghub": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "enghub"],
       "tools": ["*"]
     },
     "workiq": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "workiq"],
       "tools": ["*"]
     },
     "teams-chat": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "teams"],
       "tools": ["*"]
     },
     "mail": {
       "type": "local",
-      "command": "{{ .mcpTool.command }}",
+      "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "mail"],
       "tools": ["*"]
     },
