@@ -1,6 +1,16 @@
 {{- /* GitHub Copilot CLI MCP server config — rendered by chezmoi.
      Schema: https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers
      Loaded by Copilot CLI from ~/.copilot/mcp-config.json (override via COPILOT_HOME). */ -}}
+{{- $adoTools := (index .mcpTools "azure-devops").all -}}
+{{- $kustoTools := (index .mcpTools "azure-kusto").all -}}
+{{- $icmTools := (index .mcpTools "icm").all -}}
+{{- $enghubTools := (index .mcpTools "enghub").all -}}
+{{- $workiqTools := (index .mcpTools "workiq").all -}}
+{{- $teamsTools := (index .mcpTools "teams-chat").all -}}
+{{- $mailTools := (index .mcpTools "mail").all -}}
+{{- $playwrightTools := (index .mcpTools "playwright").all -}}
+{{- $playwrightMockedTools := (index .mcpTools "playwright-mocked").all -}}
+{{- $chromeDevtoolsTools := (index .mcpTools "chrome-devtools").all -}}
 {
   "mcpServers": {
 {{- if eq .chezmoi.os "windows" }}
@@ -8,116 +18,116 @@
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "ado", "--org", "{{ .ado.org }}", "--toolsets", "all"],
-      "tools": ["*"]
+      "tools": {{ $adoTools | toJson }}
     },
     "azure-kusto": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "kusto-native", "--service-uri", "{{ .kusto.clusterUri }}", "--database", "{{ .kusto.database }}"],
-      "tools": ["*"]
+      "tools": {{ $kustoTools | toJson }}
     },
     "icm": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "icm"],
-      "tools": ["*"]
+      "tools": {{ $icmTools | toJson }}
     },
     "enghub": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "enghub"],
-      "tools": ["*"]
+      "tools": {{ $enghubTools | toJson }}
     },
     "workiq": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "workiq"],
-      "tools": ["*"]
+      "tools": {{ $workiqTools | toJson }}
     },
     "teams-chat": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "teams"],
-      "tools": ["*"]
+      "tools": {{ $teamsTools | toJson }}
     },
     "mail": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "mail"],
-      "tools": ["*"]
+      "tools": {{ $mailTools | toJson }}
     },
     "playwright": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "npx", "-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--headless"],
-      "tools": ["*"]
+      "tools": {{ $playwrightTools | toJson }}
     },
     "chrome-devtools": {
       "type": "local",
       "command": "cmd",
       "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--browser-url", "http://127.0.0.1:9222"],
-      "tools": ["*"]
+      "tools": {{ $chromeDevtoolsTools | toJson }}
     }
 {{- else }}
     "azure-devops": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "ado", "--org", "{{ .ado.org }}", "--toolsets", "all"],
-      "tools": ["*"]
+      "tools": {{ $adoTools | toJson }}
     },
     "azure-kusto": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "kusto-native", "--service-uri", "{{ .kusto.clusterUri }}", "--database", "{{ .kusto.database }}"],
-      "tools": ["*"]
+      "tools": {{ $kustoTools | toJson }}
     },
     "icm": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "icm"],
-      "tools": ["*"]
+      "tools": {{ $icmTools | toJson }}
     },
     "enghub": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "enghub"],
-      "tools": ["*"]
+      "tools": {{ $enghubTools | toJson }}
     },
     "workiq": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "workiq"],
-      "tools": ["*"]
+      "tools": {{ $workiqTools | toJson }}
     },
     "teams-chat": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "teams"],
-      "tools": ["*"]
+      "tools": {{ $teamsTools | toJson }}
     },
     "mail": {
       "type": "local",
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "mail"],
-      "tools": ["*"]
+      "tools": {{ $mailTools | toJson }}
     },
     "playwright": {
       "type": "local",
       "command": "npx",
       "args": ["-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--headless"],
-      "tools": ["*"]
+      "tools": {{ $playwrightTools | toJson }}
     },
     "playwright-mocked": {
       "type": "local",
       "command": "npx",
       "args": ["-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--cdp-endpoint", "http://127.0.0.1:9222"],
-      "tools": ["*"]
+      "tools": {{ $playwrightMockedTools | toJson }}
     },
     "chrome-devtools": {
       "type": "local",
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest", "--browser-url", "http://127.0.0.1:9222"],
-      "tools": ["*"]
+      "tools": {{ $chromeDevtoolsTools | toJson }}
     }
 {{- end }}
   }
