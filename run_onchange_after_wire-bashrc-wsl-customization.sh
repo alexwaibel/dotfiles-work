@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Ensure ~/.bashrc sources the chezmoi-managed WSL customization file.
 # ~/.bashrc is distro-provided and intentionally left unmanaged by chezmoi
-# (agency also appends to it), so the source hook is wired in idempotently
-# here instead of managing ~/.bashrc directly.
+# so the source hook is wired in idempotently here instead of managing
+# ~/.bashrc directly.
 set -eu
 
 BASHRC="$HOME/.bashrc"
