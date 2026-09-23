@@ -8,8 +8,6 @@
 {{- $workiqTools := (index .mcpTools "workiq").all -}}
 {{- $teamsTools := (index .mcpTools "teams-chat").all -}}
 {{- $mailTools := (index .mcpTools "mail").all -}}
-{{- $playwrightTools := (index .mcpTools "playwright").all -}}
-{{- $playwrightMockedTools := (index .mcpTools "playwright-mocked").all -}}
 {{- $chromeDevtoolsTools := (index .mcpTools "chrome-devtools").all -}}
 {
   "mcpServers": {
@@ -55,12 +53,6 @@
       "command": "cmd",
       "args": ["/c", "{{ .mcpTool.command }}", "mcp", "mail"],
       "tools": {{ $mailTools | toJson }}
-    },
-    "playwright": {
-      "type": "local",
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--headless"],
-      "tools": {{ $playwrightTools | toJson }}
     },
     "chrome-devtools": {
       "type": "local",
@@ -110,18 +102,6 @@
       "command": "{{ .chezmoi.homeDir }}/.config/{{ .mcpTool.command }}/CurrentVersion/{{ .mcpTool.command }}",
       "args": ["mcp", "mail"],
       "tools": {{ $mailTools | toJson }}
-    },
-    "playwright": {
-      "type": "local",
-      "command": "npx",
-      "args": ["-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--headless"],
-      "tools": {{ $playwrightTools | toJson }}
-    },
-    "playwright-mocked": {
-      "type": "local",
-      "command": "npx",
-      "args": ["-y", "--registry", "https://registry.npmjs.org", "@playwright/mcp@latest", "--cdp-endpoint", "http://127.0.0.1:9222"],
-      "tools": {{ $playwrightMockedTools | toJson }}
     },
     "chrome-devtools": {
       "type": "local",
