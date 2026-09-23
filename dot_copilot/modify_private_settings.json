@@ -7,6 +7,10 @@
     "type" "command"
     "bash" "bash ~/.copilot/hooks/guard-git-push.sh"
     "timeoutSec" 5
+  ) (dict
+    "type" "command"
+    "bash" "bash ~/.copilot/hooks/guard-safe-shell.sh"
+    "timeoutSec" 5
   ))
 ) -}}
 {{- $settings = $settings | setValueAtPath "sandbox" (dict

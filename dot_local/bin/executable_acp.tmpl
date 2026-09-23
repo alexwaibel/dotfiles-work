@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+#
+# Launches Copilot with one of three permission profiles:
+#   safe (default) - autopilot with bounded continuations and safe tool approvals
+#   readonly       - inspection commands and read-oriented MCP tools without file writes
+#   trusted        - all tools, while retaining Copilot path and URL checks
+#
+# MCP availability and safe classifications come from
+# ~/.local/share/chezmoi/.chezmoidata/mcp-tools.json. Run the audit-mcp-tools
+# Copilot skill to compare that inventory with configured and live MCP surfaces.
+
+set -euo pipefail
+
+permission_profile="${ACP_PERMISSION_PROFILE:-safe}"
+max_autopilot_continues="${ACP_MAX_AUTOPILOT_CONTINUES:-10}"
+forward_args=()
+
+usage() {
+  cat <<'EOF'
+Usage: acp [--permissions safe|readonly|trusted] [COPILOT_ARGS...]
+
+Permission profiles:
+  safe      Start bounded autopilot; approve writes, inspection, and read-oriented MCP tools.
+  readonly  Approve inspection commands and read-oriented MCP tools, but not writes.
+  trusted   Approve all tools while retaining Copilot path and URL checks.
+
+Environment:
+  ACP_PERMISSION_PROFILE         Default profile when --permissions is omitted.
+  ACP_MAX_AUTOPILOT_CONTINUES    Safe-profile continuation cap (default: 10).
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --permissions)
+      if (($# < 2)); then
+        echo "acp: --permissions requires a profile" >&2
+        exit 2
+      fi
+      permission_profile="$2"
+      shift 2
+      ;;
+    --permissions=*)
+      permission_profile="${1#*=}"
+      shift
+      ;;
+    --acp-help)
+      usage
+      exit 0
+      ;;
+    *)
+      forward_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+safe_approvals=(
+  'shell(jq:*)'
+  'shell(date:*)'
+  'shell(pwd)'
+  'shell(ls:*)'
+  'shell(cat:*)'
+  'shell(head:*)'
+  'shell(tail:*)'
+  'shell(wc:*)'
+  'shell(grep:*)'
+  'shell(file:*)'
+  'shell(stat:*)'
+  'shell(diff:*)'
+  'shell(cmp:*)'
+  'shell(readlink:*)'
+  'shell(realpath:*)'
+  'shell(rg --no-config:*)'
+  'shell(sort:*)'
+  'shell(find:*)'
+  'shell(git status:*)'
+  'shell(git diff:*)'
+  'shell(git log:*)'
+  'shell(git blame:*)'
+  'shell(git show:*)'
+  'shell(git rev-parse:*)'
+  'shell(git grep:*)'
+  'shell(git ls-files:*)'
+  'shell(git merge-base:*)'
+  'shell(git rev-list:*)'
+  'shell(git describe:*)'
+  'shell(git remote -v)'
+  'shell(git config --get:*)'
+  'shell(git config --get-regexp:*)'
+{{- range $server, $config := .mcpTools }}
+{{- range $tool := $config.safe }}
+  '{{ $server }}({{ $tool }})'
+{{- end }}
+{{- end }}
+)
+
+permission_args=()
+case "$permission_profile" in
+  safe)
+    if [[ ! "$max_autopilot_continues" =~ ^[1-9][0-9]*$ ]]; then
+      echo "acp: ACP_MAX_AUTOPILOT_CONTINUES must be a positive integer" >&2
+      exit 2
+    fi
+    permission_args+=(
+      --autopilot
+      --max-autopilot-continues
+      "$max_autopilot_continues"
+      --allow-tool=write
+    )
+    for approval in "${safe_approvals[@]}"; do
+      permission_args+=("--allow-tool=${approval}")
+    done
+    ;;
+  readonly)
+    for approval in "${safe_approvals[@]}"; do
+      permission_args+=("--allow-tool=${approval}")
+    done
+    ;;
+  trusted)
+    permission_args+=(
+      --allow-all-tools
+      '--deny-tool=shell(sudo)'
+      '--deny-tool=shell(su)'
+      '--deny-tool=shell(doas)'
+      '--deny-tool=shell(pkexec)'
+    )
+    ;;
+  *)
+    echo "acp: unknown permission profile: ${permission_profile}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+exec {{ .mcpTool.command }} copilot "${permission_args[@]}" "${forward_args[@]}"
