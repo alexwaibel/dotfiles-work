@@ -15,8 +15,13 @@ TOOL=$(echo "$INPUT" | jq -r '.toolName // empty' | tr '[:upper:]' '[:lower:]')
 [[ "$TOOL" == "bash" || "$TOOL" == "shell" ]] || exit 0
 
 CMD=$(echo "$INPUT" | jq -r '
-  (.toolArgs // "") as $raw
-  | (try ($raw | fromjson) catch {}) as $obj
+  (.toolArgs // {}) as $raw
+  | (
+      if ($raw | type) == "object" then $raw
+      elif ($raw | type) == "string" then (try ($raw | fromjson) catch {})
+      else {}
+      end
+    ) as $obj
   | ($obj.command // $obj.script // $obj.cmd // "")
 ')
 [[ -n "$CMD" ]] || exit 0

@@ -8,15 +8,26 @@ HOOK="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/guard-git-push.sh"
 PASS=0
 FAIL=0
 
-# Build a Copilot-CLI-shaped stdin payload from a bash command
 payload() {
-  local cmd="$1"
+  local cmd="$1" format="${2:-object}"
+  if [[ "$format" == "string" ]]; then
+    jq -nc --arg cmd "$cmd" '
+      {
+        timestamp: 0,
+        cwd: "/tmp",
+        toolName: "bash",
+        toolArgs: ({command: $cmd} | tostring)
+      }
+    '
+    return
+  fi
+
   jq -nc --arg cmd "$cmd" '
     {
       timestamp: 0,
       cwd: "/tmp",
       toolName: "bash",
-      toolArgs: ({command: $cmd} | tostring)
+      toolArgs: {command: $cmd}
     }
   '
 }
@@ -72,6 +83,17 @@ expect_block "pipe"                      "git push origin users/alwaibel/agent/1
 expect_block "subshell"                  "git push origin \$(echo main)"
 expect_block "backticks"                 "git push origin \`echo main\`"
 expect_block "one valid one bad"         "git push origin users/alwaibel/agent/1-a main"
+
+echo ""
+echo "=== Payload compatibility ==="
+output=$(payload "git push origin main" string | bash "$HOOK" 2>&1)
+if [[ "$output" == *'"deny"'* ]]; then
+  echo "  PASS: legacy JSON-string toolArgs"
+  PASS=$((PASS + 1))
+else
+  echo "  FAIL: legacy JSON-string toolArgs (output='$output')"
+  FAIL=$((FAIL + 1))
+fi
 
 echo ""
 echo "=== Non-push commands (should pass through) ==="

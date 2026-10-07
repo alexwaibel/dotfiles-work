@@ -5,11 +5,11 @@
 {{- $settings = $settings | setValueAtPath "hooks" (dict
   "preToolUse" (list (dict
     "type" "command"
-    "bash" "bash ~/.copilot/hooks/guard-git-push.sh"
+    "bash" "if [[ ! -f ~/.copilot/hooks/guard-git-push.sh ]]; then printf '%s\\n' '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Required preToolUse hook is missing: ~/.copilot/hooks/guard-git-push.sh. Run chezmoi apply --force to restore it.\"}'; else exec bash ~/.copilot/hooks/guard-git-push.sh; fi"
     "timeoutSec" 5
   ) (dict
     "type" "command"
-    "bash" "bash ~/.copilot/hooks/guard-safe-shell.sh"
+    "bash" "if [[ ! -f ~/.copilot/hooks/guard-safe-shell.sh ]]; then printf '%s\\n' '{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Required preToolUse hook is missing: ~/.copilot/hooks/guard-safe-shell.sh. Run chezmoi apply --force to restore it.\"}'; else exec bash ~/.copilot/hooks/guard-safe-shell.sh; fi"
     "timeoutSec" 5
   ))
 ) -}}

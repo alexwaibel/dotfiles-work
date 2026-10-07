@@ -3,9 +3,9 @@
 # users/alwaibel/agent/*.
 #
 # Stdin schema (Copilot CLI):
-#   {"timestamp": <ms>, "cwd": "...", "toolName": "bash", "toolArgs": "<json-string>"}
-# toolArgs is itself a JSON string; for bash it typically contains a "command"
-# or "script" field. We try both.
+#   {"timestamp": <ms>, "cwd": "...", "toolName": "bash", "toolArgs": {...}}
+# Older CLI versions encoded toolArgs as a JSON string, so both forms are
+# accepted.
 #
 # Decision is emitted to stdout as JSON:
 #   {"permissionDecision": "deny", "permissionDecisionReason": "..."}
@@ -21,10 +21,14 @@ command -v jq >/dev/null 2>&1 || exit 0
 TOOL=$(echo "$INPUT" | jq -r '.toolName // empty' | tr '[:upper:]' '[:lower:]')
 [[ "$TOOL" == "bash" || "$TOOL" == "shell" ]] || exit 0
 
-# toolArgs is a JSON-encoded string. Unwrap to an object, then pull command/script.
 CMD=$(echo "$INPUT" | jq -r '
-  (.toolArgs // "") as $raw
-  | (try ($raw | fromjson) catch {}) as $obj
+  (.toolArgs // {}) as $raw
+  | (
+      if ($raw | type) == "object" then $raw
+      elif ($raw | type) == "string" then (try ($raw | fromjson) catch {})
+      else {}
+      end
+    ) as $obj
   | ($obj.command // $obj.script // $obj.cmd // "")
 ')
 [[ -n "$CMD" ]] || exit 0
