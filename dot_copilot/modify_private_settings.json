@@ -31,6 +31,7 @@
       "readonlyPaths" (list
         (printf "%s/.nvm" $home)
         "/proc/sys/kernel/random/uuid"
+	(printf "%s/.copilot/hooks" $home)
       )
       "deniedPaths" (list (printf "%s/.ssh" $home) (printf "%s/.aws" $home))
       "clearPolicyOnExit" true
