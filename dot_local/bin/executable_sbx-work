@@ -14,31 +14,27 @@ dry_run=false
 usage() {
   cat <<'EOF'
 Usage:
-  sbx-work [--dry-run] doctor [REPO]
-  sbx-work [--dry-run] create WORK_ITEM SLUG [REPO]
-  sbx-work run WORK_ITEM
-  sbx-work status [WORK_ITEM]
+  sbx-work [--dry-run] seed WORK_ITEM SLUG [REPO]
   sbx-work [--dry-run] ado-exec WORK_ITEM -- COMMAND [ARG...]
-  sbx-work [--dry-run] allow-network WORK_ITEM RULE [RULE...]
-  sbx-work [--dry-run] import WORK_ITEM
+  sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
-  sbx-work [--dry-run] stop WORK_ITEM
-  sbx-work [--dry-run] remove [--force] WORK_ITEM
 
 Commands:
-  doctor         Check host prerequisites, credentials, and Git access.
-  create         Create a mountless VM with a VM-local Git clone and branch.
-  run            Attach Copilot to an existing sandbox.
-  status         Show persisted workflow state.
-  ado-exec       Run one command with a process-scoped Azure Artifacts token.
-  allow-network  Add sandbox-scoped network rules.
-  import         Transfer committed VM work into a standard host worktree.
-  sync           Transfer the rebased host branch back into the VM.
-  stop           Stop the sandbox while preserving its filesystem.
-  remove         Remove an exported sandbox. Refuses unexported work by default.
+  seed      Work around broken WSL clone mode by seeding a mountless sandbox
+            from a verified Git bundle and creating the task branch.
+  ado-exec  Run one VM command with a process-scoped Azure Artifacts token.
+  export    Bundle committed VM work into a standard host worktree and rebase.
+  sync      Transfer the rebased host branch back into the VM.
+
+Use native sbx commands for everything else:
+  sbx run --name wi-<id>-vm
+  sbx ls
+  sbx policy allow network --sandbox wi-<id>-vm <rule>
+  sbx stop wi-<id>-vm
+  sbx rm wi-<id>-vm
 
 REPO defaults to the current Git repository name. Repository setup, test, and
-validation commands intentionally remain the coding agent's responsibility.
+validation commands remain the coding agent's responsibility.
 EOF
 }
 
@@ -49,10 +45,6 @@ die() {
 
 note() {
   printf '==> %s\n' "$*"
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
 quote_command() {
@@ -128,11 +120,7 @@ discover_base_branch() {
     printf 'master\n'
     return
   fi
-  local current_branch
-  current_branch="$(git -C "$repo_path" branch --show-current)"
-  [[ "$current_branch" == "main" || "$current_branch" == "master" ]] ||
-    die "cannot discover the default branch"
-  printf '%s\n' "$current_branch"
+  die "cannot discover the default branch from origin/HEAD, origin/main, or origin/master"
 }
 
 ensure_canonical_ready() {
@@ -153,7 +141,7 @@ state_file() {
 read_state() {
   local file
   file="$(state_file "$1")"
-  [[ -f "$file" ]] || die "state not found for work item $1"
+  [[ -f "$file" ]] || die "metadata not found for work item $1"
   cat "$file"
 }
 
@@ -180,7 +168,7 @@ update_state() {
   shift 2
   local file tmp
   file="$(state_file "$id")"
-  [[ -f "$file" ]] || die "state not found for work item $id"
+  [[ -f "$file" ]] || die "metadata not found for work item $id"
   tmp="${file}.tmp"
   jq "$@" "$filter" "$file" >"$tmp"
   mv "$tmp" "$file"
@@ -212,37 +200,7 @@ ado_organization() {
   die "cannot derive Azure DevOps organization from origin: $remote"
 }
 
-doctor() {
-  local repo
-  repo="$(resolve_repo "${1:-}")"
-  local repo_path sbx base_branch
-  repo_path="$(canonical_repo "$repo")"
-  sbx="$(find_sbx)"
-  base_branch="$(discover_base_branch "$repo_path")"
-
-  require_command git
-  require_command jq
-  require_command wslpath
-  require_command azureauth
-  ensure_canonical_ready "$repo_path" "$base_branch"
-
-  note "Docker Sandboxes"
-  run "$sbx" version
-  run "$sbx" daemon status
-
-  note "Copilot credential"
-  if ! "$sbx" secret ls | grep -Eq '(^|[[:space:]])copilot([[:space:]]|$)'; then
-    die "Copilot secret missing; run: sbx secret set copilot --command 'gh auth token'"
-  fi
-
-  note "Git authentication"
-  run git -C "$repo_path" fetch --dry-run origin
-
-  note "Repository"
-  printf 'repo: %s\nbase: %s\npath: %s\n' "$repo" "$base_branch" "$repo_path"
-}
-
-create() {
+seed() {
   local id="$1"
   local slug="$2"
   local repo
@@ -250,9 +208,9 @@ create() {
   validate_work_item "$id"
   validate_slug "$slug"
 
-  local existing_state
-  existing_state="$(state_file "$id")"
-  [[ ! -e "$existing_state" ]] || die "state already exists: $existing_state"
+  local metadata
+  metadata="$(state_file "$id")"
+  [[ ! -e "$metadata" ]] || die "metadata already exists: $metadata"
 
   local repo_path sbx base_branch sandbox branch repo_dir
   repo_path="$(canonical_repo "$repo")"
@@ -268,41 +226,11 @@ create() {
   git -C "$repo_path" show-ref --verify --quiet "refs/remotes/origin/$branch" &&
     die "remote branch already exists: $branch"
 
-  if $dry_run; then
-    note "dry-run create plan"
-  else
-    mkdir -p "$state_root"
-  fi
-
   note "refreshing ${repo}/${base_branch}"
   run git -C "$repo_path" fetch origin
   run git -C "$repo_path" merge --ff-only "origin/$base_branch"
   local base_sha
   base_sha="$(git -C "$repo_path" rev-parse "$base_branch")"
-
-  if ! $dry_run; then
-    write_state "$id" \
-      --arg id "$id" \
-      --arg slug "$slug" \
-      --arg repo "$repo" \
-      --arg sandbox "$sandbox" \
-      --arg branch "$branch" \
-      --arg baseBranch "$base_branch" \
-      --arg baseSha "$base_sha" \
-      --arg repoDir "$repo_dir" \
-      --arg status "creating" \
-      '{
-        workItem: $id,
-        slug: $slug,
-        repo: $repo,
-        sandbox: $sandbox,
-        branch: $branch,
-        baseBranch: $baseBranch,
-        baseSha: $baseSha,
-        repoDir: $repoDir,
-        status: $status
-      }'
-  fi
 
   local seed_bundle="${state_root}/${id}-seed.bundle"
   run git -C "$repo_path" bundle create "$seed_bundle" "$base_branch"
@@ -317,39 +245,30 @@ create() {
   run rm -f "$seed_bundle"
 
   if ! $dry_run; then
-    update_state "$id" '.status = $status' --arg status "ready"
+    write_state "$id" \
+      --arg id "$id" \
+      --arg slug "$slug" \
+      --arg repo "$repo" \
+      --arg sandbox "$sandbox" \
+      --arg branch "$branch" \
+      --arg baseBranch "$base_branch" \
+      --arg baseSha "$base_sha" \
+      --arg repoDir "$repo_dir" \
+      '{
+        workItem: $id,
+        slug: $slug,
+        repo: $repo,
+        sandbox: $sandbox,
+        branch: $branch,
+        baseBranch: $baseBranch,
+        baseSha: $baseSha,
+        repoDir: $repoDir
+      }'
   fi
-  note "ready: run 'sbx-work run $id'"
-}
 
-run_agent() {
-  local id="$1"
-  validate_work_item "$id"
-  local sbx sandbox repo_dir
-  sbx="$(find_sbx)"
-  sandbox="$(state_value "$id" '.sandbox')"
-  repo_dir="$(state_value "$id" '.repoDir')"
-  printf 'After Copilot starts, run: /cwd %s\n' "$repo_dir"
-  exec "$sbx" run --name "$sandbox"
-}
-
-show_status() {
-  if [[ -n "${1:-}" ]]; then
-    read_state "$1" | jq .
-    return
-  fi
-  if [[ ! -d "$state_root" ]]; then
-    printf 'No sbx-work state found.\n'
-    return
-  fi
-  local found=false file
-  shopt -s nullglob
-  for file in "$state_root"/*.json; do
-    found=true
-    jq -r '[.workItem, .repo, .sandbox, .branch, .status] | @tsv' "$file"
-  done
-  shopt -u nullglob
-  $found || printf 'No sbx-work state found.\n'
+  note "seeded $sandbox"
+  printf 'Attach: sbx run --name %s\n' "$sandbox"
+  printf 'Then run: /cwd %s\n' "$repo_dir"
 }
 
 ado_exec() {
@@ -391,20 +310,7 @@ ado_exec() {
   unset token ADO_NPM_TOKEN
 }
 
-allow_network() {
-  local id="$1"
-  shift
-  (($# > 0)) || die "allow-network requires at least one RULE"
-  validate_work_item "$id"
-  local sbx sandbox rule
-  sbx="$(find_sbx)"
-  sandbox="$(state_value "$id" '.sandbox')"
-  for rule in "$@"; do
-    run "$sbx" policy allow network --sandbox "$sandbox" "$rule"
-  done
-}
-
-import_work() {
+export_work() {
   local id="$1"
   validate_work_item "$id"
   local sbx sandbox repo branch base_branch base_sha repo_dir slug repo_path
@@ -424,10 +330,10 @@ import_work() {
 
   local vm_head
   vm_head="$("$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)"
-  [[ "$vm_head" != "$base_sha" ]] || die "sandbox branch has no commits to import"
+  [[ "$vm_head" != "$base_sha" ]] || die "sandbox branch has no commits to export"
 
   local vm_bundle="/tmp/sbx-work-${id}.bundle"
-  local host_bundle="${state_root}/${id}-import.bundle"
+  local host_bundle="${state_root}/${id}-export.bundle"
   sbx_exec_shell "$sbx" "$sandbox" \
     "cd $(printf '%q' "$repo_dir") && git bundle create $(printf '%q' "$vm_bundle") $(printf '%q' "$branch") ^$(printf '%q' "$base_sha") && git bundle verify $(printf '%q' "$vm_bundle")"
   run "$sbx" cp "$sandbox:$vm_bundle" "$(win_path "$host_bundle")"
@@ -443,21 +349,21 @@ import_work() {
     fi
   fi
 
-  local import_ref="refs/remotes/sbx-work/${id}"
-  run git -C "$worktree" fetch "$host_bundle" "$branch:$import_ref"
-  run git -C "$worktree" merge --ff-only "$import_ref"
+  local export_ref="refs/remotes/sbx-work/${id}"
+  run git -C "$worktree" fetch "$host_bundle" "$branch:$export_ref"
+  run git -C "$worktree" merge --ff-only "$export_ref"
   run git -C "$worktree" rebase "origin/$base_branch"
-  local imported_commit
-  imported_commit="$(git -C "$worktree" rev-parse HEAD)"
+  local exported_commit
+  exported_commit="$(git -C "$worktree" rev-parse HEAD)"
+  run rm -f "$host_bundle"
 
   if ! $dry_run; then
     update_state "$id" \
-      '.status = $status | .hostWorktree = $worktree | .importedCommit = $commit' \
-      --arg status "imported" \
+      '.hostWorktree = $worktree | .exportedCommit = $commit' \
       --arg worktree "$worktree" \
-      --arg commit "$imported_commit"
+      --arg commit "$exported_commit"
   fi
-  note "imported to $worktree at $imported_commit"
+  note "exported to $worktree at $exported_commit"
 }
 
 sync_work() {
@@ -482,55 +388,14 @@ sync_work() {
   run "$sbx" cp "$(win_path "$bundle")" "$sandbox:/tmp/sbx-work-${id}-sync.bundle"
   sbx_exec_shell "$sbx" "$sandbox" \
     "cd $(printf '%q' "$repo_dir") && git fetch /tmp/sbx-work-${id}-sync.bundle $(printf '%q' "$branch"):refs/remotes/host/rebased && git reset --hard refs/remotes/host/rebased"
+  run rm -f "$bundle"
 
   local synced_commit
   synced_commit="$(git -C "$worktree" rev-parse HEAD)"
   if ! $dry_run; then
-    update_state "$id" \
-      '.status = $status | .syncedCommit = $commit' \
-      --arg status "synced" \
-      --arg commit "$synced_commit"
+    update_state "$id" '.syncedCommit = $commit' --arg commit "$synced_commit"
   fi
-  run rm -f "$bundle"
   note "synced $synced_commit; run repository validation inside the VM"
-}
-
-stop_work() {
-  local id="$1"
-  validate_work_item "$id"
-  local sbx sandbox
-  sbx="$(find_sbx)"
-  sandbox="$(state_value "$id" '.sandbox')"
-  run "$sbx" stop "$sandbox"
-  if ! $dry_run; then
-    update_state "$id" '.status = $status' --arg status "stopped"
-  fi
-}
-
-remove_work() {
-  local force="$1"
-  local id="$2"
-  validate_work_item "$id"
-  local sbx sandbox repo_dir imported_commit vm_head vm_status
-  sbx="$(find_sbx)"
-  sandbox="$(state_value "$id" '.sandbox')"
-  repo_dir="$(state_value "$id" '.repoDir')"
-  imported_commit="$(state_value "$id" '.importedCommit // empty' || true)"
-
-  if [[ "$force" != "true" ]]; then
-    [[ -n "$imported_commit" ]] ||
-      die "sandbox has not been imported; use --force only to discard work"
-    vm_status="$("$sbx" exec "$sandbox" -- git -C "$repo_dir" status --porcelain)"
-    [[ -z "$vm_status" ]] || die "sandbox repository has uncommitted changes"
-    vm_head="$("$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)"
-    [[ "$vm_head" == "$imported_commit" ]] ||
-      die "sandbox contains unexported commits; import again before removal"
-  fi
-
-  run "$sbx" rm --force "$sandbox"
-  if ! $dry_run; then
-    update_state "$id" '.status = $status' --arg status "removed"
-  fi
 }
 
 while (($#)); do
@@ -557,50 +422,21 @@ command_name="${1:-}"
 shift
 
 case "$command_name" in
-  doctor)
-    (($# <= 1)) || die "doctor accepts at most one REPO"
-    doctor "${1:-}"
-    ;;
-  create)
-    (($# >= 2 && $# <= 3)) || die "create requires WORK_ITEM SLUG [REPO]"
-    create "$@"
-    ;;
-  run)
-    (($# == 1)) || die "run requires WORK_ITEM"
-    run_agent "$1"
-    ;;
-  status)
-    (($# <= 1)) || die "status accepts at most one WORK_ITEM"
-    show_status "${1:-}"
+  seed)
+    (($# >= 2 && $# <= 3)) || die "seed requires WORK_ITEM SLUG [REPO]"
+    seed "$@"
     ;;
   ado-exec)
     (($# >= 3)) || die "ado-exec requires WORK_ITEM -- COMMAND [ARG...]"
     ado_exec "$@"
     ;;
-  allow-network)
-    (($# >= 2)) || die "allow-network requires WORK_ITEM RULE [RULE...]"
-    allow_network "$@"
-    ;;
-  import)
-    (($# == 1)) || die "import requires WORK_ITEM"
-    import_work "$1"
+  export)
+    (($# == 1)) || die "export requires WORK_ITEM"
+    export_work "$1"
     ;;
   sync)
     (($# == 1)) || die "sync requires WORK_ITEM"
     sync_work "$1"
-    ;;
-  stop)
-    (($# == 1)) || die "stop requires WORK_ITEM"
-    stop_work "$1"
-    ;;
-  remove)
-    force=false
-    if [[ "${1:-}" == "--force" ]]; then
-      force=true
-      shift
-    fi
-    (($# == 1)) || die "remove requires [--force] WORK_ITEM"
-    remove_work "$force" "$1"
     ;;
   *)
     die "unknown command: $command_name"

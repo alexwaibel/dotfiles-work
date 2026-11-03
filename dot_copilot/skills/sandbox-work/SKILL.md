@@ -36,12 +36,11 @@ process by `sbx-work create`; they must not be present in the Copilot process.
 3. Run:
 
    ```bash
-   sbx-work doctor <repo>
-   sbx-work create <work-item> <slug> <repo>
-   sbx-work run <work-item>
+   sbx-work seed <work-item> <slug> <repo>
+   sbx run --name wi-<work-item>-vm
    ```
 
-4. After Copilot starts, change to the path printed by `sbx-work run`.
+4. After Copilot starts, change to the path printed by `sbx-work seed`.
 5. Have the VM agent read the repository's `AGENTS.md`, `README.md`, and
    package metadata to determine setup and validation commands.
 6. When a setup command needs Azure Artifacts authentication, run it from the
@@ -55,7 +54,7 @@ process by `sbx-work create`; they must not be present in the Copilot process.
    Docker policy log and add only the required sandbox-scoped rule:
 
    ```bash
-   sbx-work allow-network <work-item> '<host-rule>'
+   sbx policy allow network --sandbox wi-<work-item>-vm '<host-rule>'
    ```
 
 8. Use checkpoints:
@@ -70,37 +69,36 @@ process by `sbx-work create`; they must not be present in the Copilot process.
 10. When the VM has a clean committed change:
 
    ```bash
-   sbx-work import <work-item>
+   sbx-work export <work-item>
    sbx-work sync <work-item>
    ```
 
 11. After `sync`, rerun the repository-defined validation inside the VM.
 12. Review the host worktree diff against the work item. Push only the expected
     `users/alwaibel/agent/<id>-<slug>` branch and create a draft PR.
-13. Stop the VM for PR follow-up:
+13. Stop the VM for PR follow-up using Docker directly:
 
    ```bash
-   sbx-work stop <work-item>
+   sbx stop wi-<work-item>-vm
    ```
 
 14. Remove it only after all VM commits are exported:
 
     ```bash
-    sbx-work remove <work-item>
+    sbx rm wi-<work-item>-vm
     ```
 
 ## Recovery
 
-- `sbx-work status [id]` shows persisted state under
-  `~/.local/state/sbx-work/`.
+- Transfer metadata is stored under `~/.local/state/sbx-work/`.
 - A reboot or daemon restart should not require recreating the sandbox.
-- If import or validation fails, keep both the VM and host worktree. Do not
+- If export or synchronization fails, keep both the VM and host worktree. Do not
   delete state or bypass bundle verification.
-- `sbx-work remove --force` discards unexported work and requires explicit user
-  approval.
+- Before running `sbx rm`, confirm the VM is clean and its HEAD matches the
+  exported or synchronized host commit.
 
 ## Repository behavior
 
-`sbx-work` discovers the default branch from `origin/HEAD` and does not encode
-repository setup, dependency, test, or validation commands. Those belong to
-the repository and must be discovered from its checked-in instructions.
+`sbx-work` is only a compatibility shim for WSL bundle transfer and
+process-scoped Azure Artifacts authentication. Lifecycle, policy, diagnostics,
+and status remain native `sbx` operations.

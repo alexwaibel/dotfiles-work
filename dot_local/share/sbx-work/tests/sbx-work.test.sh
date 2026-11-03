@@ -34,9 +34,8 @@ expect_success "shell syntax" bash -n "$script"
 expect_success "help" bash "$script" --help
 expect_failure "missing command" bash "$script"
 expect_failure "unknown command" bash "$script" unknown
-expect_failure "invalid work item" bash "$script" status abc
-expect_failure "invalid create work item" bash "$script" --dry-run create abc valid-slug repo
-expect_failure "invalid slug" bash "$script" --dry-run create 123 Invalid_Slug repo
+expect_failure "invalid seed work item" bash "$script" --dry-run seed abc valid-slug repo
+expect_failure "invalid slug" bash "$script" --dry-run seed 123 Invalid_Slug repo
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
@@ -62,16 +61,16 @@ dry_run_output="$(
   SBX_WORK_REPOS_ROOT="$repos_root" \
     SBX_WORK_STATE_ROOT="$state_root" \
     SBX_WORK_SBX_BIN=/bin/true \
-    bash "$script" --dry-run create 123 valid-slug example-repo
+  bash "$script" --dry-run seed 123 valid-slug example-repo
 )"
 if [[ "$dry_run_output" == *"create --name wi-123-vm copilot"* ]] &&
   [[ "$dry_run_output" == *"wi-123-vm:/tmp/example-repo.bundle"* ]] &&
   [[ "$dry_run_output" == *"users/alwaibel/agent/123-valid-slug"* ]] &&
   [[ ! -e "${state_root}/123.json" ]]; then
-  printf 'PASS: create dry-run plan\n'
+  printf 'PASS: seed dry-run plan\n'
   pass=$((pass + 1))
 else
-  printf 'FAIL: create dry-run plan\n'
+  printf 'FAIL: seed dry-run plan\n'
   fail=$((fail + 1))
 fi
 
