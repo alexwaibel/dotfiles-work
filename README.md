@@ -46,8 +46,8 @@ If you're already logged in but locked, use `bw unlock --raw` instead of `bw log
 This will:
 - Prompt for your corporate email, Azure AD tenant ID, and ADO config (stored locally, only asked once)
 - Run the platform-specific bootstrap script which installs:
-  - **Windows**: Bitwarden (desktop + CLI), Azure CLI, nvm-windows, Node.js LTS, WSL with Ubuntu, GitHub Copilot CLI — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
-  - **Linux/WSL**: curl, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, GitHub Copilot CLI — via apt + native installers.
+  - **Windows**: Bitwarden (desktop + CLI), Azure CLI, AzureAuth, Docker Sandboxes, Git, GitHub CLI, nvm-windows, Node.js LTS, WSL with Ubuntu, GitHub Copilot CLI — via winget + native installers. Also disables the Windows OpenSSH agent (Bitwarden replaces it).
+  - **Linux/WSL**: curl, Git, jq, nvm, Node.js LTS, Bitwarden CLI (via npm), Azure CLI, AzureAuth, GitHub Copilot CLI — via apt + native installers.
 - Prompt for Bitwarden login (if not already authenticated)
 - Extract the `alexwaibelmsft` SSH public key from the agent and configure `~/.ssh/config` so Git uses the correct key for GitHub
 - Switch the chezmoi repo remote from HTTPS to SSH
@@ -72,12 +72,39 @@ The Bitwarden SSH agent serves keys directly from the vault — the private key 
 2. Add the public keys from your GitHub SSH Key vault entries to https://github.com/settings/ssh/new
 3. Verify: `ssh -T git@github.com`
 
-### 5. Verify
+### 5. Set up Docker Sandboxes
+
+Run these one-time commands in Windows PowerShell:
+
+```powershell
+sbx login
+gh auth login
+sbx secret set copilot --command 'gh auth token'
+sbx policy init balanced
+```
+
+The `copilot` service secret is required by Docker's Copilot kit. The token stays in the
+Windows credential store and is injected by Docker's proxy rather than copied into the VM.
+
+The WSL-installed `sbx-work` helper fills only the current WSL integration gaps:
+
+```bash
+sbx-work seed <work-item> <slug> <repo>
+sbx run --name wi-<work-item>-vm
+sbx-work ado-exec <work-item> -- <dependency-install-command>
+sbx-work export <work-item>
+sbx-work sync <work-item>
+```
+
+Use native `sbx` commands for policy, diagnostics, lifecycle, and removal.
+
+### 6. Verify
 
 ```bash
 chezmoi doctor
 chezmoi diff
 chezmoi apply -v
+sbx diagnose
 ```
 
 ## Day-to-Day Usage

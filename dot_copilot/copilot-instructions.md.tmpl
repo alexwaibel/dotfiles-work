@@ -93,3 +93,19 @@ Rules:
   ```
 - Remove a finished worktree with `git -C ~/repos/<repo> worktree remove <path>` — don't `rm -rf`
   the directory, which leaves a dangling registration needing `git worktree prune`.
+
+# Docker Sandbox Delegation
+
+When the user explicitly requests the Docker Sandbox workflow, use the `sandbox-work` skill.
+The current session remains the trusted coordinator; plain Copilot inside the mountless VM
+performs repository investigation, edits, tests, and commits.
+
+- Keep ADO, browser, external MCP, Git remote, push, and PR operations on the host.
+- Do not give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
+- Use `sbx-work` only for the WSL compatibility gaps: bundle seeding, process-scoped Azure
+  Artifacts authentication, exporting commits, and syncing rebased commits.
+- Use native `sbx` commands for lifecycle, status, policy, diagnostics, and removal.
+- Host filesystem layout rules above still apply. The isolated VM clone lives under
+  `/home/agent/workspace/<repo>` and is not a host worktree.
+- Use literal absolute paths for authenticated host Git commands. Credential forwarding can
+  fail when a `git -C` path contains an unexpanded `~`.
