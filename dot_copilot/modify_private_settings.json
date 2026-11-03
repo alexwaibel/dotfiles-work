@@ -17,6 +17,7 @@
   "enabled" true
   "addCurrentWorkingDirectory" false
   "allowBypass" true
+  "sandboxMcpServers" false
   "userPolicy" (dict
     "filesystem" (dict
       "readwritePaths" (list
