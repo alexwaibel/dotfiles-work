@@ -12,7 +12,6 @@ Generate a unified daily dashboard combining ADO sprint items and Logseq TODOs.
 
 - Logseq journals: `/mnt/c/Users/alwaibel/OneDrive - Microsoft/Documents/logseq/journals/`
 - Logseq format: org-mode (`.org` files), TODO markers: `* TODO`, `** TODO`, `*** TODO`, `* DOING`
-- Dashboard output: `~/cockpit/state/daily-dashboard.md`
 - ADO config: see `~/.copilot/copilot-instructions.md` for org/project/team
 
 ## Procedure
@@ -33,7 +32,8 @@ Generate a unified daily dashboard combining ADO sprint items and Logseq TODOs.
 
 ### 3. Generate dashboard
 
-Write `~/cockpit/state/daily-dashboard.md` with this structure:
+Render this structure directly in the conversation. Do not persist a dashboard
+file:
 
 ```markdown
 # Daily Dashboard
@@ -90,6 +90,8 @@ After presenting, ask the user:
 - Which Logseq TODOs to promote (and execute: create ADO items or add as children)
 - Which to mark DONE in Logseq (and execute: edit the .org file)
 - Any priority adjustments needed
+
+Do not edit ADO or Logseq until the user confirms the specific action.
 
 ## EOD variant
 

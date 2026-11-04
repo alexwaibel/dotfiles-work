@@ -11,7 +11,6 @@
 {{- $readwritePaths := list
   "/tmp"
   (printf "%s/repos" $home)
-  (printf "%s/cockpit" $home)
   (printf "%s/.copilot/notes" $home)
   (printf "%s/.cache/chrome-debug-profile" $home)
   (printf "%s/.cache/chrome-devtools-mcp" $home)

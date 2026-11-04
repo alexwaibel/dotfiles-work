@@ -14,14 +14,13 @@ If the user explicitly requests Docker Sandbox isolation, use the
 
 ## Arguments
 
-Optional space-separated work item IDs. If omitted, auto-select the next
-queued item by ADO priority. Process one item at a time (no parallelism).
+Optional space-separated work item IDs. If omitted, fetch the current sprint
+live and propose the highest-priority assigned item. Process one item at a time.
 
 ## Procedure
 
-1. Read state file (`~/cockpit/state/ado-tasks.md`). If empty/stale, run `/standup` first.
-2. Select one item (highest-priority queued, or specified by user).
-3. **Assess fitness** — fetch full description via `wit_get_work_item` (expand=all):
+1. Select the specified item, or fetch the current sprint live and propose one.
+2. **Assess fitness** — fetch the full work item with relations (`expand=all`):
    - Scope clear enough to implement? -> `ready`
    - Root cause unknown but researchable in code? -> `investigate`
    - Requirements vague / needs design? -> `needs-spec`

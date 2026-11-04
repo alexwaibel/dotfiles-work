@@ -29,6 +29,20 @@ Run the complete suite before committing:
 bash tests/run.sh
 ```
 
+## Work Management
+
+Copilot skills query live systems rather than maintaining a parallel Markdown
+state database:
+
+- ADO owns sprint, priority, state, and work-item relationships.
+- Git owns branches, commits, and worktrees.
+- PR providers own review state.
+- Docker Sandboxes and `~/.local/state/sbx-work` own isolated-work transfer state.
+- Copilot session history provides prior-session context.
+
+`standup`, `daily`, `status`, `work`, and `sandbox-work` compose these sources
+on demand. There is no cockpit state file or browser handoff queue.
+
 ## Prerequisites
 
 - **Windows**: Windows 11 with winget

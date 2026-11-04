@@ -1,6 +1,3 @@
-cockpit/state/ado-tasks.md
-cockpit/state/browser-queue/*.md
-cockpit/state/browser-queue/archive/*.md
 tests
 
 {{ if ne .chezmoi.os "windows" }}
