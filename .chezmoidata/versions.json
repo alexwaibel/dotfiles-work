@@ -1,0 +1,7 @@
+{
+  "versions": {
+    "azureAuth": "0.9.5",
+    "chromeDevtoolsMcp": "1.12.0",
+    "nvm": "0.40.4"
+  }
+}

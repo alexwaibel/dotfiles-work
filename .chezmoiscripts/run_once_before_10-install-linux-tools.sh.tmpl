@@ -1,0 +1,62 @@
+#!/bin/bash
+# chezmoi:template:left-delimiter="{{" right-delimiter="}}"
+# First-time WSL/Linux tool bootstrap.
+
+set -euo pipefail
+
+sudo apt-get update -qq
+sudo apt-get install -y -qq \
+    bubblewrap \
+    curl \
+    git \
+    iptables \
+    jq \
+    libnss3-tools \
+    seahorse \
+    slirp4netns \
+    socat \
+    unzip
+
+export NVM_DIR="${HOME}/.nvm"
+if [ ! -d "$NVM_DIR" ]; then
+    echo "Installing nvm ..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v{{ .versions.nvm }}/install.sh | bash
+fi
+
+# shellcheck source=/dev/null
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+if ! nvm ls --no-colors lts/* &>/dev/null; then
+    echo "Installing Node.js LTS ..."
+    nvm install --lts
+fi
+
+command -v bw >/dev/null 2>&1 || npm install -g @bitwarden/cli
+
+if ! command -v az >/dev/null 2>&1; then
+    echo "Installing Azure CLI ..."
+    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+fi
+az extension add --name azure-devops --yes 2>/dev/null || true
+
+if ! command -v azureauth >/dev/null 2>&1; then
+    echo "Installing AzureAuth ..."
+    export AZUREAUTH_VERSION='{{ .versions.azureAuth }}'
+    curl -sL "https://raw.githubusercontent.com/AzureAD/microsoft-authentication-cli/${AZUREAUTH_VERSION}/install/linux-install.sh" | sh
+fi
+
+if ! command -v {{ .mcpTool.command }} >/dev/null 2>&1; then
+    echo "Installing {{ .mcpTool.command }} ..."
+    curl -sSfL {{ .mcpTool.installUrl }} | sh -s {{ .mcpTool.command }}
+fi
+
+command -v copilot >/dev/null 2>&1 || npm install -g @github/copilot
+
+if ! command -v starship >/dev/null 2>&1; then
+    echo "Installing Starship ..."
+    curl -sL https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-gnu.tar.gz |
+        tar xz -C /tmp
+    sudo install -m 755 /tmp/starship /usr/local/bin/starship
+    rm -f /tmp/starship
+fi
+
+echo "Linux tools ready."

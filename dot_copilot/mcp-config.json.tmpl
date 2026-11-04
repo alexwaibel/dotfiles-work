@@ -58,7 +58,7 @@
     "chrome-devtools": {
       "type": "local",
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "chrome-devtools-mcp@1.12.0", "--browser-url", "http://127.0.0.1:9222", "--no-usage-statistics"],
+      "args": ["/c", "npx", "-y", "chrome-devtools-mcp@{{ .versions.chromeDevtoolsMcp }}", "--browser-url", "http://127.0.0.1:9222", "--no-usage-statistics"],
       "tools": {{ $chromeDevtoolsTools | toJson }}
     }
 {{- else }}
@@ -107,7 +107,7 @@
     "chrome-devtools": {
       "type": "local",
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@1.12.0", "--browser-url", "http://127.0.0.1:9222", "--no-usage-statistics"],
+      "args": ["-y", "chrome-devtools-mcp@{{ .versions.chromeDevtoolsMcp }}", "--browser-url", "http://127.0.0.1:9222", "--no-usage-statistics"],
       "tools": {{ $chromeDevtoolsTools | toJson }}
     },
     "sbx-host": {

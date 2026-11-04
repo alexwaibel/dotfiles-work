@@ -6,17 +6,11 @@ allowed-tools: shell
 
 # Work
 
-> **Note — Copilot CLI migration:** the original Claude Code version of this
-> skill launched up to 3 background subagents in parallel (`Agent` with
-> `run_in_background: true`), each working in its own worktree. Copilot CLI is
-> a single-agent CLI without subagent launching, so this rewrite drops the
-> parallelism and walks through one item at a time in the active session. The
-> reference prompts in `references/` describe the original autonomous-agent
-> flow and need rework before they're useful again. Treat this skill as a
-> structured planning aid for now.
-
 Assess fitness, propose a plan, then walk through implementation in the
 current session.
+
+If the user explicitly requests Docker Sandbox isolation, use the
+`sandbox-work` skill instead of this host-worktree implementation flow.
 
 ## Arguments
 
@@ -73,46 +67,59 @@ The goal is to maximize the chance of completing autonomously. Upfront discussio
 
 ## Implementation phase
 
-10. Create an isolated worktree:
+10. Resolve the canonical clone, repository name, and remote default branch.
+    Canonical clones live at `~/repos/<repo>` and remain clean on the default
+    branch. Use literal absolute paths for authenticated Git commands.
+
+11. Fetch the remote and create an isolated worktree outside the canonical
+    clone:
+
     ```bash
-    cd <repo path>
-    git fetch origin
-    git worktree add .copilot/worktrees/<id>-<slug> -b {{ .ado.branchPrefix }}<id>-<slug> origin/master
-    cd .copilot/worktrees/<id>-<slug>
+    git -C /home/<user>/repos/<repo> fetch origin
+    git -C /home/<user>/repos/<repo> worktree add \
+      /home/<user>/repos/worktrees/<repo>/<id>-<slug> \
+      -b {{ .ado.branchPrefix }}<id>-<slug> \
+      origin/<default-branch>
     ```
-    Always branch from `origin/master` (or `origin/main` — check which exists) so the base is the latest remote state. Never branch from the local `master`.
 
-11. Read the repo's `AGENTS.md` (or `CLAUDE.md` if still present) for build/test/lint commands.
+    Always branch from the latest remote ref, never the local default branch.
 
-12. Run the full test suite. All tests MUST pass before writing any code. If tests fail on a clean checkout, stop and report.
+12. Read the repo's `AGENTS.md` or `CLAUDE.md` for setup, build, test, lint,
+    typecheck, and PR conventions.
 
-13. Work through the plan one unit at a time:
+13. Establish a clean baseline with the smallest command that covers the
+    affected area. Escalate to broader validation only when repository
+    instructions require it or targeted failures justify it. Stop if the clean
+    baseline is already failing in the relevant area.
+
+14. Work through the plan one unit at a time:
     a. Write a failing test that reproduces the bug or validates the change (RED)
     b. Implement the minimal fix/feature to make the test pass (GREEN)
     c. Refactor if needed while keeping tests green
-    d. Run the full test suite — all tests must pass
+    d. Run the smallest relevant test/lint/typecheck commands
     e. Commit with a descriptive message. Do NOT use `AB#` prefixes — work items are linked via the PR, not commit messages.
 
-14. **Self-review** — run `git diff main...HEAD` and evaluate:
+15. Run the repository's required pre-push checks, then **self-review** the
+    branch diff against `origin/<default-branch>`:
     - **Correctness**: does this fix/implement the work item?
     - **Scope**: are ALL changes related to this work item? Revert any unrelated changes.
     - **Tests**: are existing tests passing? Are new tests present where needed?
     - **Style**: does the code match the repo's conventions?
 
-15. Push branch and open a DRAFT PR:
+16. Push branch and open a DRAFT PR:
     a. Check for PR conventions (`.azuredevops/pull_request_template.md`, `.github/pull_request_template.md`, or PR instructions in `AGENTS.md`/`CLAUDE.md`).
     b. Create a draft PR via `az repos pr create --work-items <ID>` with a descriptive title (no `AB#` prefix).
     c. Draft only, link work items, no `AB#` prefix in the title.
 
-16. **Clean up worktree**:
+17. **Clean up worktree**:
     ```bash
-    cd <repo path>
-    git worktree remove .copilot/worktrees/<id>-<slug>
+    git -C /home/<user>/repos/<repo> worktree remove \
+      /home/<user>/repos/worktrees/<repo>/<id>-<slug>
     ```
 
-17. Post an ADO comment with: summary of changes, PR link, open questions.
+18. Post an ADO comment with: summary of changes, PR link, open questions.
 
-18. Update ADO work item state to Active if currently Proposed.
+19. Update ADO work item state to Active if currently Proposed.
 
 ## Notifications
 
@@ -129,3 +136,5 @@ az rest --method POST \
 - ONLY modify files related to this work item
 - ONLY push to branch: `{{ .ado.branchPrefix }}<id>-<slug>`
 - ONLY open DRAFT PRs — never publish or merge
+- NEVER create worktrees inside a canonical clone
+- NEVER branch from a stale local default branch

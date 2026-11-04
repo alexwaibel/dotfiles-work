@@ -1,0 +1,84 @@
+# chezmoi:template:left-delimiter="{{" right-delimiter="}}"
+# First-time Windows tool and system bootstrap.
+
+#Requires -Version 5.1
+$ErrorActionPreference = 'Stop'
+
+$packages = @(
+    'Bitwarden.Bitwarden'
+    'Bitwarden.CLI'
+    'Docker.sbx'
+    'Git.Git'
+    'GitHub.cli'
+    'Microsoft.AzureCLI'
+    'Microsoft.Azure.Auth'
+    'CoreyButler.NVMforWindows'
+    'jstarks.npiperelay'
+    'jqlang.jq'
+    'Starship.Starship'
+    'Google.Chrome'
+)
+
+foreach ($pkg in $packages) {
+    $installed = winget list --id $pkg --exact --accept-source-agreements 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Installing $pkg ..."
+        winget install --id $pkg --exact --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) { throw "Failed to install $pkg" }
+    }
+}
+
+$env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+            [System.Environment]::GetEnvironmentVariable('Path', 'User')
+
+$nvmHome = [System.Environment]::GetEnvironmentVariable('NVM_HOME', 'User')
+$nvmSymlink = [System.Environment]::GetEnvironmentVariable('NVM_SYMLINK', 'User')
+if ($nvmHome) {
+    $env:NVM_HOME = $nvmHome
+    $env:NVM_SYMLINK = $nvmSymlink
+    if ($env:Path -notlike "*$nvmHome*") { $env:Path = "$nvmHome;$env:Path" }
+    if ($nvmSymlink -and ($env:Path -notlike "*$nvmSymlink*")) {
+        $env:Path = "$nvmSymlink;$env:Path"
+    }
+}
+
+$nvmNode = nvm list 2>$null | Select-String '\*'
+if (-not $nvmNode) {
+    $nvmOutput = nvm install lts 2>&1 | Out-String
+    Write-Host $nvmOutput
+    if ($nvmOutput -match 'v(\d+\.\d+\.\d+)') {
+        nvm use $Matches[1]
+    }
+}
+
+az extension add --name azure-devops --yes 2>$null
+
+$sshAgent = Get-Service -Name ssh-agent -ErrorAction SilentlyContinue
+if ($sshAgent -and ($sshAgent.Status -eq 'Running' -or $sshAgent.StartType -ne 'Disabled')) {
+    Write-Host 'Disabling Windows OpenSSH agent; Bitwarden provides the agent.'
+    $proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command',
+        'Stop-Service ssh-agent -ErrorAction SilentlyContinue; Set-Service ssh-agent -StartupType Disabled' -Wait -PassThru
+    if ($proc.ExitCode -ne 0) {
+        Write-Warning 'Failed to disable ssh-agent; disable it manually.'
+    }
+}
+
+Write-Host 'Setting up WSL ...'
+$proc = Start-Process -Verb RunAs -FilePath powershell.exe -ArgumentList '-Command',
+    'wsl --install --no-launch; wsl --update; wsl --install -d Ubuntu --no-launch' -Wait -PassThru
+if ($proc.ExitCode -ne 0) {
+    throw 'Failed to install or update WSL.'
+}
+
+if (-not (Get-Command {{ .mcpTool.command }} -ErrorAction SilentlyContinue)) {
+    Write-Host 'Installing {{ .mcpTool.command }} ...'
+    iex "& { $(irm {{ .mcpTool.windowsInstallUrl }})} {{ .mcpTool.command }}"
+    $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [System.Environment]::GetEnvironmentVariable('Path', 'User')
+}
+
+if (-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
+    npm install -g '@github/copilot'
+}
+
+Write-Host 'Windows tools ready.'

@@ -1,14 +1,17 @@
 cockpit/state/ado-tasks.md
 cockpit/state/browser-queue/*.md
 cockpit/state/browser-queue/archive/*.md
+tests
 
 {{ if ne .chezmoi.os "windows" }}
-install-and-setup.ps1
+configure-windows-user.ps1
+install-windows-tools.ps1
 {{ end }}
 
 {{ if ne .chezmoi.os "linux" }}
-install-and-setup.sh
+configure-linux-user.sh
 install-doom-emacs.sh
+install-linux-tools.sh
 install-sbx-host-mcp.sh
 .ssh/agent-bridge.sh
 .ssh-agent/known_hosts

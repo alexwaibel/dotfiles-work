@@ -4,6 +4,31 @@
 
 Portable, repeatable dev environment managed by [chezmoi](https://www.chezmoi.io/) with secrets from [Bitwarden](https://bitwarden.com/). Works on both Windows and WSL/Linux.
 
+## Repository Layout
+
+```text
+.chezmoidata/       Shared template data and version pins
+.chezmoiscripts/    Ordered first-run and change-triggered lifecycle scripts
+dot_*/              Files and directories managed into $HOME
+tests/run.sh        Complete local validation entry point
+```
+
+Lifecycle scripts are intentionally split by concern:
+
+- `run_once_before_10_*` installs platform tools before managed files are applied.
+- `run_once_after_80_*` configures the user environment after managed files exist.
+- `run_onchange_after_*` performs idempotent synchronization when its inputs change.
+
+Application-specific tests stay beside their implementation. `tests/run.sh`
+discovers and invokes them along with template parsing, ShellCheck, PowerShell
+parsing, JSON validation, MCP inventory checks, and dependency auditing.
+
+Run the complete suite before committing:
+
+```bash
+bash tests/run.sh
+```
+
 ## Prerequisites
 
 - **Windows**: Windows 11 with winget
