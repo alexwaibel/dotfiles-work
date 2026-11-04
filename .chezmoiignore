@@ -6,6 +6,8 @@ tests
 {{ if ne .chezmoi.os "windows" }}
 configure-windows-user.ps1
 install-windows-tools.ps1
+.chezmoiscripts/10-install-windows-tools.ps1
+.chezmoiscripts/80-configure-windows-user.ps1
 {{ end }}
 
 {{ if ne .chezmoi.os "linux" }}
@@ -13,6 +15,11 @@ configure-linux-user.sh
 install-doom-emacs.sh
 install-linux-tools.sh
 install-sbx-host-mcp.sh
+.chezmoiscripts/10-install-linux-tools.sh
+.chezmoiscripts/80-configure-linux-user.sh
+.chezmoiscripts/install-doom-emacs.sh
+.chezmoiscripts/install-sbx-host-mcp.sh
+.chezmoiscripts/wire-bashrc-wsl-customization.sh
 .ssh/agent-bridge.sh
 .ssh-agent/known_hosts
 .local/bin/ado-npm-auth-wsl
