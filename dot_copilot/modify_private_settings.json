@@ -6,13 +6,13 @@
   "/proc/sys/kernel/random/uuid"
   (printf "%s/.copilot/hooks" $home)
   (printf "%s/.cache/copilot" $home)
+  (printf "%s/.ssh-agent/known_hosts" $home)
 -}}
 {{- $readwritePaths := list
   "/tmp"
   (printf "%s/repos" $home)
   (printf "%s/cockpit" $home)
   (printf "%s/.copilot/notes" $home)
-  (printf "%s/.ssh-agent" $home)
   (printf "%s/.cache/chrome-debug-profile" $home)
   (printf "%s/.cache/chrome-devtools-mcp" $home)
   (printf "%s/.cache/fontconfig" $home)
