@@ -1,6 +1,26 @@
 {{- /* chezmoi:modify-template */ -}}
 {{- $home := .chezmoi.homeDir -}}
 {{- $settings := .chezmoi.stdin | default "{}" | fromJson -}}
+{{- $readonlyPaths := list
+  (printf "%s/.nvm" $home)
+  "/proc/sys/kernel/random/uuid"
+  (printf "%s/.copilot/hooks" $home)
+  (printf "%s/.cache/copilot" $home)
+-}}
+{{- $readwritePaths := list
+  "/tmp"
+  (printf "%s/repos" $home)
+  (printf "%s/cockpit" $home)
+  (printf "%s/.copilot/notes" $home)
+  (printf "%s/.ssh-agent" $home)
+  (printf "%s/.cache/chrome-debug-profile" $home)
+  (printf "%s/.cache/chrome-devtools-mcp" $home)
+  (printf "%s/.cache/fontconfig" $home)
+  (printf "%s/.cache/google-chrome" $home)
+  (printf "%s/.cache/mesa_shader_cache" $home)
+  (printf "%s/.cache/ms-playwright" $home)
+  (printf "%s/.npm" $home)
+-}}
 {{- $settings = $settings | setValueAtPath "version" 1 -}}
 {{- $settings = $settings | setValueAtPath "hooks" (dict
   "preToolUse" (list (dict
@@ -20,21 +40,12 @@
   "sandboxMcpServers" false
   "userPolicy" (dict
     "filesystem" (dict
-      "readwritePaths" (list
-        "/tmp"
-        (printf "%s/repos" $home)
-        (printf "%s/cockpit" $home)
-        (printf "%s/.copilot/notes" $home)
-        (printf "%s/.ssh-agent" $home)
-        (printf "%s/.cache" $home)
-        (printf "%s/.npm" $home)
+      "readwritePaths" $readwritePaths
+      "readonlyPaths" $readonlyPaths
+      "deniedPaths" (list
+        (printf "%s/.ssh" $home)
+        (printf "%s/.aws" $home)
       )
-      "readonlyPaths" (list
-        (printf "%s/.nvm" $home)
-        "/proc/sys/kernel/random/uuid"
-	(printf "%s/.copilot/hooks" $home)
-      )
-      "deniedPaths" (list (printf "%s/.ssh" $home) (printf "%s/.aws" $home))
       "clearPolicyOnExit" true
     )
     "network" (dict

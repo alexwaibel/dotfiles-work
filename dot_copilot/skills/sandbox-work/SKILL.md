@@ -27,7 +27,7 @@ The VM owns:
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
 Azure Artifacts credentials may be passed only to the dependency-install
-process by `sbx-work create`; they must not be present in the Copilot process.
+process by `sbx-work ado-exec`; they must not be present in the Copilot process.
 
 ## Procedure
 
@@ -102,3 +102,15 @@ process by `sbx-work create`; they must not be present in the Copilot process.
 `sbx-work` is only a compatibility shim for WSL bundle transfer and
 process-scoped Azure Artifacts authentication. Lifecycle, policy, diagnostics,
 and status remain native `sbx` operations.
+
+## Local Copilot sandbox
+
+Windows executables require WSL interop through `/init` and `/run/WSL`.
+Granting those paths would let a sandboxed process launch arbitrary Windows
+programs and would defeat the host filesystem boundary.
+
+Run `sbx-work` and native `sbx.exe` operations through an explicit Copilot
+sandbox-bypass approval. Never add `/init`, `/run/WSL`, or broad `/mnt/c`
+access to the local sandbox policy. If a command fails with `cannot execute:
+required file not found`, request a bypass for that exact command instead of
+changing filesystem grants.

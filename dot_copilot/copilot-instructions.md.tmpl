@@ -109,3 +109,6 @@ performs repository investigation, edits, tests, and commits.
   `/home/agent/workspace/<repo>` and is not a host worktree.
 - Use literal absolute paths for authenticated host Git commands. Credential forwarding can
   fail when a `git -C` path contains an unexpanded `~`.
+- Run `sbx-work` and `sbx.exe` through explicit local-sandbox bypass approval. Do not grant
+  `/init` or `/run/WSL`: together they allow arbitrary Windows process launch and defeat the
+  Linux filesystem boundary.
