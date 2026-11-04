@@ -91,7 +91,7 @@ The WSL-installed `sbx-work` helper fills only the current WSL integration gaps:
 ```bash
 sbx-work seed <work-item> <slug> <repo>
 sbx run --name wi-<work-item>-vm
-sbx-work ado-exec <work-item> -- <dependency-install-command>
+sbx-work ado-install <work-item> -- <package-manager> <install-args>
 sbx-work export <work-item>
 sbx-work sync <work-item>
 ```

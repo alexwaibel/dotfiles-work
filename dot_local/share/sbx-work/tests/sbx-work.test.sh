@@ -86,20 +86,35 @@ EOF
 
 git -C "$repo" remote set-url origin \
   https://example.visualstudio.com/DefaultCollection/Project/_git/example-repo
-ado_exec_output="$(
+ado_install_output="$(
   SBX_WORK_REPOS_ROOT="$repos_root" \
     SBX_WORK_STATE_ROOT="$state_root" \
     SBX_WORK_SBX_BIN=/bin/true \
-    bash "$script" --dry-run ado-exec 123 -- yarn install --immutable
+    bash "$script" --dry-run ado-install 123 -- yarn install --immutable
 )"
-if [[ "$ado_exec_output" == *"ADO_NPM_TOKEN=<redacted>"* ]] &&
-  [[ "$ado_exec_output" == *"yarn install --immutable"* ]]; then
-  printf 'PASS: ado-exec dry-run plan\n'
+if [[ "$ado_install_output" == *"ADO_NPM_TOKEN=<redacted>"* ]] &&
+  [[ "$ado_install_output" == *"YARN_ENABLE_SCRIPTS=false"* ]] &&
+  [[ "$ado_install_output" == *"yarn install --immutable"* ]]; then
+  printf 'PASS: ado-install dry-run plan\n'
   pass=$((pass + 1))
 else
-  printf 'FAIL: ado-exec dry-run plan\n'
+  printf 'FAIL: ado-install dry-run plan\n'
   fail=$((fail + 1))
 fi
+
+expect_failure "reject arbitrary token command" \
+  env \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN=/bin/true \
+  bash "$script" --dry-run ado-install 123 -- env
+
+expect_failure "reject package lifecycle override" \
+  env \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN=/bin/true \
+  bash "$script" --dry-run ado-install 123 -- npm install --ignore-scripts=false
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

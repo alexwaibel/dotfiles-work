@@ -15,14 +15,16 @@ usage() {
   cat <<'EOF'
 Usage:
   sbx-work [--dry-run] seed WORK_ITEM SLUG [REPO]
-  sbx-work [--dry-run] ado-exec WORK_ITEM -- COMMAND [ARG...]
+  sbx-work [--dry-run] ado-install WORK_ITEM -- PACKAGE_MANAGER [ARG...]
   sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
 
 Commands:
   seed      Work around broken WSL clone mode by seeding a mountless sandbox
             from a verified Git bundle and creating the task branch.
-  ado-exec  Run one VM command with a process-scoped Azure Artifacts token.
+  ado-install
+            Run a package install with a process-scoped Azure Artifacts token
+            and package lifecycle scripts disabled.
   export    Bundle committed VM work into a standard host worktree and rebase.
   sync      Transfer the rebased host branch back into the VM.
 
@@ -271,13 +273,43 @@ seed() {
   printf 'Then run: /cwd %s\n' "$repo_dir"
 }
 
-ado_exec() {
+validate_install_command() {
+  local executable="${1##*/}"
+  shift
+  case "$executable" in
+    yarn)
+      if (($# > 0)) && [[ "$1" != "install" && "$1" != -* ]]; then
+        die "yarn command must be install or install flags"
+      fi
+      ;;
+    npm | pnpm)
+      (($# > 0)) || die "$executable requires install or ci"
+      [[ "$1" == "install" || "$1" == "ci" ]] ||
+        die "$executable command must be install or ci"
+      ;;
+    *)
+      die "unsupported package manager: $executable"
+      ;;
+  esac
+
+  local argument
+  for argument in "$@"; do
+    case "$argument" in
+      --ignore-scripts=false | --enable-scripts | --enable-scripts=*)
+        die "package lifecycle scripts cannot be enabled during ado-install"
+        ;;
+    esac
+  done
+}
+
+ado_install() {
   local id="$1"
   shift
-  [[ "${1:-}" == "--" ]] || die "ado-exec requires -- before COMMAND"
+  [[ "${1:-}" == "--" ]] || die "ado-install requires -- before PACKAGE_MANAGER"
   shift
-  (($# > 0)) || die "ado-exec requires COMMAND"
+  (($# > 0)) || die "ado-install requires PACKAGE_MANAGER"
   validate_work_item "$id"
+  validate_install_command "$@"
 
   local sbx sandbox repo repo_dir repo_path organization
   sbx="$(find_sbx)"
@@ -289,7 +321,12 @@ ado_exec() {
 
   if $dry_run; then
     printf '+ ADO_NPM_TOKEN=<redacted> '
-    quote_command "$sbx" exec -e ADO_NPM_TOKEN "$sandbox" -- \
+    quote_command "$sbx" exec \
+      -e ADO_NPM_TOKEN \
+      -e YARN_ENABLE_SCRIPTS=false \
+      -e npm_config_ignore_scripts=true \
+      -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
+      "$sandbox" -- \
       bash -lc 'cd "$1" && shift && exec "$@"' bash "$repo_dir" "$@"
     printf '\n'
     return
@@ -305,7 +342,12 @@ ado_exec() {
       --prompt-hint "DockerSandbox-wi-${id}" \
       --timeout 30
   )"
-  ADO_NPM_TOKEN="$token" "$sbx" exec -e ADO_NPM_TOKEN "$sandbox" -- \
+  ADO_NPM_TOKEN="$token" "$sbx" exec \
+    -e ADO_NPM_TOKEN \
+    -e YARN_ENABLE_SCRIPTS=false \
+    -e npm_config_ignore_scripts=true \
+    -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
+    "$sandbox" -- \
     bash -lc 'cd "$1" && shift && exec "$@"' bash "$repo_dir" "$@"
   unset token ADO_NPM_TOKEN
 }
@@ -426,9 +468,9 @@ case "$command_name" in
     (($# >= 2 && $# <= 3)) || die "seed requires WORK_ITEM SLUG [REPO]"
     seed "$@"
     ;;
-  ado-exec)
-    (($# >= 3)) || die "ado-exec requires WORK_ITEM -- COMMAND [ARG...]"
-    ado_exec "$@"
+  ado-install)
+    (($# >= 3)) || die "ado-install requires WORK_ITEM -- PACKAGE_MANAGER [ARG...]"
+    ado_install "$@"
     ;;
   export)
     (($# == 1)) || die "export requires WORK_ITEM"

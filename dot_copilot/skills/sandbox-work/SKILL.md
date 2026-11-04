@@ -26,8 +26,9 @@ The VM owns:
 - commits on `users/alwaibel/agent/*`
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
-Azure Artifacts credentials may be passed only to the dependency-install
-process by `sbx-work ado-exec`; they must not be present in the Copilot process.
+Azure Artifacts credentials may be passed only to the constrained
+`sbx-work ado-install` package-manager process. Lifecycle scripts are disabled
+while that short-lived package-read PAT exists.
 
 ## Procedure
 
@@ -47,8 +48,12 @@ process by `sbx-work ado-exec`; they must not be present in the Copilot process.
    trusted host without exposing the token to Copilot:
 
    ```bash
-   sbx-work ado-exec <work-item> -- <command> [args...]
+   sbx-work ado-install <work-item> -- <package-manager> [install-args...]
    ```
+
+   After `ado-install` returns and the PAT is gone, run any repository-required
+   rebuild, postinstall, code generation, or setup command normally inside the
+   VM.
 
 7. If Balanced networking blocks a required package or API host, inspect the
    Docker policy log and add only the required sandbox-scoped rule:
@@ -99,9 +104,9 @@ process by `sbx-work ado-exec`; they must not be present in the Copilot process.
 
 ## Repository behavior
 
-`sbx-work` is only a compatibility shim for WSL bundle transfer and
-process-scoped Azure Artifacts authentication. Lifecycle, policy, diagnostics,
-and status remain native `sbx` operations.
+`sbx-work` is only a compatibility shim for WSL bundle transfer and constrained,
+process-scoped Azure Artifacts package installation. Lifecycle, policy,
+diagnostics, and status remain native `sbx` operations.
 
 ## Local Copilot sandbox
 
