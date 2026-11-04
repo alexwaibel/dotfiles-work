@@ -1,0 +1,12 @@
+{
+  "name": "sbx-host-mcp",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs && bash test/sbx-work.test.sh ./sbx-work.sh"
+  }
+}

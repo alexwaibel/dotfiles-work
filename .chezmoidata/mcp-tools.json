@@ -374,6 +374,24 @@
         "kusto_ingest_inline_into_table": "Writes rows into a Kusto table."
       }
     },
+    "sbx-host": {
+      "all": [
+        "ado_install",
+        "export",
+        "inspect",
+        "seed",
+        "sync"
+      ],
+      "safe": [
+        "inspect"
+      ],
+      "highRisk": {
+        "ado_install": "Runs a constrained package install with a short-lived Azure Artifacts token.",
+        "export": "Creates or updates a host worktree and rebases an agent branch.",
+        "seed": "Creates a Docker Sandbox VM and a task branch from a canonical repository.",
+        "sync": "Resets the VM clone to the rebased host branch."
+      }
+    },
     "teams-chat": {
       "all": [
         "AddChannelMember",

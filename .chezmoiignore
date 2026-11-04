@@ -9,9 +9,13 @@ install-and-setup.ps1
 {{ if ne .chezmoi.os "linux" }}
 install-and-setup.sh
 install-doom-emacs.sh
+install-sbx-host-mcp.sh
 .ssh/agent-bridge.sh
 .ssh-agent/known_hosts
 .local/bin/ado-npm-auth-wsl
+.local/bin/sbx-work
+.local/share/sbx-host-mcp
+.local/share/sbx-host-mcp/**
 .config/doom
 .config/doom/**
 {{ end }}

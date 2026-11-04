@@ -36,20 +36,20 @@ while that short-lived package-read PAT exists.
 2. Resolve unclear reproduction or design questions on the host.
 3. Run:
 
-   ```bash
-   sbx-work seed <work-item> <slug> <repo>
-   sbx run --name wi-<work-item>-vm
-   ```
+   - Call `sbx-host.seed` with the work-item ID, slug, and repository.
+   - Ask the user to attach from Windows Terminal:
 
-4. After Copilot starts, change to the path printed by `sbx-work seed`.
+     ```powershell
+     sbx run --name wi-<work-item>-vm
+     ```
+
+4. After Copilot starts, change to the path returned by `sbx-host.seed`.
 5. Have the VM agent read the repository's `AGENTS.md`, `README.md`, and
    package metadata to determine setup and validation commands.
 6. When a setup command needs Azure Artifacts authentication, run it from the
    trusted host without exposing the token to Copilot:
 
-   ```bash
-   sbx-work ado-install <work-item> -- <package-manager> [install-args...]
-   ```
+   Call `sbx-host.ado_install` with the package manager and install arguments.
 
    After `ado-install` returns and the PAT is gone, run any repository-required
    rebuild, postinstall, code generation, or setup command normally inside the
@@ -73,10 +73,8 @@ while that short-lived package-read PAT exists.
 9. Keep browser reproduction and live network inspection on the host.
 10. When the VM has a clean committed change:
 
-   ```bash
-   sbx-work export <work-item>
-   sbx-work sync <work-item>
-   ```
+   - Call `sbx-host.export`.
+   - Call `sbx-host.sync` after host review/rebase.
 
 11. After `sync`, rerun the repository-defined validation inside the VM.
 12. Review the host worktree diff against the work item. Push only the expected
@@ -104,9 +102,11 @@ while that short-lived package-read PAT exists.
 
 ## Repository behavior
 
-`sbx-work` is only a compatibility shim for WSL bundle transfer and constrained,
-process-scoped Azure Artifacts package installation. Lifecycle, policy,
-diagnostics, and status remain native `sbx` operations.
+The `sbx-host` MCP server is the constrained host bridge. It exposes only
+`inspect`, `seed`, `ado_install`, `export`, and `sync`; modifying tools require
+explicit approval. The underlying `sbx-work` CLI remains an implementation
+detail for bundle transfer and constrained Azure Artifacts package installation.
+Lifecycle, policy, diagnostics, and removal remain native `sbx` operations.
 
 ## Local Copilot sandbox
 
@@ -114,8 +114,7 @@ Windows executables require WSL interop through `/init` and `/run/WSL`.
 Granting those paths would let a sandboxed process launch arbitrary Windows
 programs and would defeat the host filesystem boundary.
 
-Run `sbx-work` and native `sbx.exe` operations through an explicit Copilot
-sandbox-bypass approval. Never add `/init`, `/run/WSL`, or broad `/mnt/c`
-access to the local sandbox policy. If a command fails with `cannot execute:
-required file not found`, request a bypass for that exact command instead of
-changing filesystem grants.
+Use the unsandboxed, schema-constrained `sbx-host` MCP bridge for supported host
+operations. Never add `/init`, `/run/WSL`, or broad `/mnt/c` access to the local
+sandbox policy. Native lifecycle operations that the bridge does not expose
+must be run by the user from Windows Terminal.

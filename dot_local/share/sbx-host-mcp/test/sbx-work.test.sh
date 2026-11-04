@@ -116,5 +116,29 @@ expect_failure "reject package lifecycle override" \
   SBX_WORK_SBX_BIN=/bin/true \
   bash "$script" --dry-run ado-install 123 -- npm install --ignore-scripts=false
 
+expect_failure "reject split lifecycle override" \
+  env \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN=/bin/true \
+  bash "$script" --dry-run ado-install 123 -- npm install --ignore-scripts false
+
+expect_failure "reject registry override" \
+  env \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN=/bin/true \
+  bash "$script" --dry-run ado-install 123 -- yarn install --registry=https://example.com
+
+exec 8>"${state_root}/operation.lock"
+flock -n 8
+expect_failure "reject concurrent operation" \
+  env \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN=/bin/true \
+  bash "$script" --dry-run seed 124 another-slug example-repo
+flock -u 8
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

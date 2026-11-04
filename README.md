@@ -86,17 +86,17 @@ sbx policy init balanced
 The `copilot` service secret is required by Docker's Copilot kit. The token stays in the
 Windows credential store and is injected by Docker's proxy rather than copied into the VM.
 
-The WSL-installed `sbx-work` helper fills only the current WSL integration gaps:
+The WSL `sbx-host` MCP bridge fills only the current WSL integration gaps. Invoke the
+`sandbox-work` skill from a Copilot session; it uses schema-constrained host tools for seed,
+package restore, export, and sync. Attach to the resulting VM from Windows Terminal:
 
-```bash
-sbx-work seed <work-item> <slug> <repo>
+```powershell
 sbx run --name wi-<work-item>-vm
-sbx-work ado-install <work-item> -- <package-manager> <install-args>
-sbx-work export <work-item>
-sbx-work sync <work-item>
 ```
 
-Use native `sbx` commands for policy, diagnostics, lifecycle, and removal.
+Use native `sbx` commands for policy, diagnostics, lifecycle, and removal. Do not grant the
+local Copilot sandbox `/init` or `/run/WSL`; those paths permit arbitrary Windows process
+launch.
 
 ### 6. Verify
 

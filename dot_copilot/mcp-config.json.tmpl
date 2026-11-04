@@ -9,6 +9,7 @@
 {{- $teamsTools := (index .mcpTools "teams-chat").all -}}
 {{- $mailTools := (index .mcpTools "mail").all -}}
 {{- $chromeDevtoolsTools := (index .mcpTools "chrome-devtools").all -}}
+{{- $sbxHostTools := (index .mcpTools "sbx-host").all -}}
 {
   "mcpServers": {
 {{- if eq .chezmoi.os "windows" }}
@@ -108,6 +109,12 @@
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@1.12.0", "--browser-url", "http://127.0.0.1:9222", "--no-usage-statistics"],
       "tools": {{ $chromeDevtoolsTools | toJson }}
+    },
+    "sbx-host": {
+      "type": "local",
+      "command": "node",
+      "args": ["{{ .chezmoi.homeDir }}/.local/share/sbx-host-mcp/server.mjs"],
+      "tools": {{ $sbxHostTools | toJson }}
     }
 {{- end }}
   }

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# package-lock hash: {{ include "dot_local/share/sbx-host-mcp/package-lock.json" | sha256sum }}
+
+set -euo pipefail
+
+npm ci \
+  --prefix "${HOME}/.local/share/sbx-host-mcp" \
+  --ignore-scripts \
+  --no-audit \
+  --no-fund \
+  --registry=https://registry.npmjs.org
