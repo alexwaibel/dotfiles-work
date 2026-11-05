@@ -97,6 +97,20 @@ while that short-lived package-read PAT exists.
 
 - Transfer metadata is stored under `~/.local/state/sbx-work/`.
 - A reboot or daemon restart should not require recreating the sandbox.
+- Interactive attachment always remains user-run from Windows Terminal; the
+  host MCP bridge cannot proxy the VM's TTY.
+- If Copilot reports expired or unauthorized credentials, ask the user to run:
+
+  ```powershell
+  gh auth status --hostname github.com
+  sbx secret set copilot `
+    --command 'gh auth token --hostname github.com' `
+    --refresh on-demand
+  sbx stop wi-<work-item>-vm
+  sbx run --name wi-<work-item>-vm
+  ```
+
+  If `gh auth status` fails, run `gh auth login --hostname github.com` first.
 - If export or synchronization fails, keep both the VM and host worktree. Do not
   delete state or bypass bundle verification.
 - Before running `sbx rm`, confirm the VM is clean and its HEAD matches the

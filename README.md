@@ -118,7 +118,9 @@ Run these one-time commands in Windows PowerShell:
 ```powershell
 sbx login
 gh auth login
-sbx secret set copilot --command 'gh auth token'
+sbx secret set copilot `
+  --command 'gh auth token --hostname github.com' `
+  --refresh on-demand
 sbx policy init balanced
 ```
 
