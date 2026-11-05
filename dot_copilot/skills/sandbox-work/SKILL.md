@@ -103,6 +103,9 @@ while that short-lived package-read PAT exists.
 
   ```powershell
   gh auth status --hostname github.com
+  sbx secret set github `
+    --command 'gh auth token --hostname github.com' `
+    --refresh on-demand
   sbx secret set copilot `
     --command 'gh auth token --hostname github.com' `
     --refresh on-demand
