@@ -1,7 +1,6 @@
 ---
 name: status
 description: Check live work-item, branch, PR, sandbox, and recent-session status. Use when the user says "status", "check progress", or "what's running".
-allowed-tools: shell
 ---
 
 # Status

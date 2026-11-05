@@ -1,7 +1,6 @@
 ---
 name: sandbox-work
 description: Run an ADO coding task through an isolated Docker Sandbox VM using the sbx-work helper. Use when the user says "sandbox work item", "Docker sandbox workflow", "run this bug in sbx", or wants an autonomous implementation isolated from the host.
-allowed-tools: shell
 ---
 
 # Sandbox Work
@@ -27,26 +26,29 @@ The VM owns:
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
 Azure Artifacts credentials may be passed only to the constrained
-`sbx-work ado-install` package-manager process. Lifecycle scripts are disabled
+`sbx-host.ado_install` package-manager process. Lifecycle scripts are disabled
 while that short-lived package-read PAT exists.
 
 ## Procedure
 
-1. Fetch the complete ADO item and assess fitness before creating a sandbox.
+1. Fetch the complete ADO item and assess fitness.
 2. Resolve unclear reproduction or design questions on the host.
-3. Run:
+3. Call `sbx-host.inspect` for the work-item ID:
+   - If metadata exists, verify the repository, branch, base, and VM path, then
+     resume that sandbox. Do not seed again.
+   - If metadata is absent, identify the repository and slug, then call
+     `sbx-host.seed`.
+4. Ask the user to attach from Windows Terminal:
 
-   - Call `sbx-host.seed` with the work-item ID, slug, and repository.
-   - Ask the user to attach from Windows Terminal:
+   ```powershell
+   sbx run --name wi-<work-item>-vm
+   ```
 
-     ```powershell
-     sbx run --name wi-<work-item>-vm
-     ```
-
-4. After Copilot starts, change to the path returned by `sbx-host.seed`.
-5. Have the VM agent read the repository's `AGENTS.md`, `README.md`, and
+5. After Copilot starts, change to the VM repository path returned by
+   `sbx-host.inspect` or `sbx-host.seed`.
+6. Have the VM agent read the repository's `AGENTS.md`, `README.md`, and
    package metadata to determine setup and validation commands.
-6. When a setup command needs Azure Artifacts authentication, run it from the
+7. When a setup command needs Azure Artifacts authentication, run it from the
    trusted host without exposing the token to Copilot:
 
    Call `sbx-host.ado_install` with the package manager and install arguments.
@@ -55,14 +57,14 @@ while that short-lived package-read PAT exists.
    rebuild, postinstall, code generation, or setup command normally inside the
    VM.
 
-7. If Balanced networking blocks a required package or API host, inspect the
+8. If Balanced networking blocks a required package or API host, inspect the
    Docker policy log and add only the required sandbox-scoped rule:
 
    ```bash
    sbx policy allow network --sandbox wi-<work-item>-vm '<host-rule>'
    ```
 
-8. Use checkpoints:
+9. Use checkpoints:
    - baseline setup and tests
    - structural comparison and data-flow trace
    - one root-cause theory
@@ -70,22 +72,22 @@ while that short-lived package-read PAT exists.
    - minimal implementation
    - focused and full validation
    - commit without push or PR
-9. Keep browser reproduction and live network inspection on the host.
-10. When the VM has a clean committed change:
+10. Keep browser reproduction and live network inspection on the host.
+11. When the VM has a clean committed change:
 
    - Call `sbx-host.export`.
    - Call `sbx-host.sync` after host review/rebase.
 
-11. After `sync`, rerun the repository-defined validation inside the VM.
-12. Review the host worktree diff against the work item. Push only the expected
+12. After `sync`, rerun the repository-defined validation inside the VM.
+13. Review the host worktree diff against the work item. Push only the expected
     `users/alwaibel/agent/<id>-<slug>` branch and create a draft PR.
-13. Stop the VM for PR follow-up using Docker directly:
+14. Stop the VM for PR follow-up using Docker directly:
 
    ```bash
    sbx stop wi-<work-item>-vm
    ```
 
-14. Remove it only after all VM commits are exported:
+15. Remove it only after all VM commits are exported:
 
     ```bash
     sbx rm wi-<work-item>-vm
