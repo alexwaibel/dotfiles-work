@@ -10,6 +10,7 @@
 {{- $mailTools := (index .mcpTools "mail").all -}}
 {{- $chromeDevtoolsTools := (index .mcpTools "chrome-devtools").all -}}
 {{- $sbxHostTools := (index .mcpTools "sbx-host").all -}}
+{{- $hostAttachmentsTools := (index .mcpTools "host-attachments").all -}}
 {
   "mcpServers": {
 {{- if eq .chezmoi.os "windows" }}
@@ -115,6 +116,15 @@
       "command": "node",
       "args": ["{{ .chezmoi.homeDir }}/.local/share/sbx-host-mcp/server.mjs"],
       "tools": {{ $sbxHostTools | toJson }}
+    },
+    "host-attachments": {
+      "type": "local",
+      "command": "node",
+      "args": ["{{ .chezmoi.homeDir }}/.local/share/sbx-host-mcp/attachments-server.mjs"],
+      "env": {
+        "HOST_ATTACHMENTS_ROOT": "/mnt/c/Users/{{ .chezmoi.username }}/AppData/Local/Temp"
+      },
+      "tools": {{ $hostAttachmentsTools | toJson }}
     }
 {{- end }}
   }

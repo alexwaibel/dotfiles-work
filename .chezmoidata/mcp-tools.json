@@ -392,6 +392,15 @@
         "sync": "Resets the VM clone to the rebased host branch."
       }
     },
+    "host-attachments": {
+      "all": [
+        "read_screenshot"
+      ],
+      "safe": [
+        "read_screenshot"
+      ],
+      "highRisk": {}
+    },
     "teams-chat": {
       "all": [
         "AddChannelMember",

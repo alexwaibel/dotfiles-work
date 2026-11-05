@@ -25,6 +25,12 @@ third-party skills. Follow the engineering workflow itself without sending usage
 Do not read or update `~/.copilot/notes` unless the user explicitly requests a
 session handoff.
 
+# User Screenshot Attachments
+
+When a user attachment is stored under the Windows temporary directory and the
+local sandbox denies direct access, use `host-attachments.read_screenshot` for
+paths named `copilot-image-*`. Never grant broad `/mnt/c` or Windows Temp access.
+
 # Debugging
 
 When diagnosing a bug in a feature that has an analogous *working* feature in the same codebase, this is a **hard gate**:
