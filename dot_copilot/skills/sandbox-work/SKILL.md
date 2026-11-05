@@ -48,15 +48,12 @@ while that short-lived package-read PAT exists.
    `sbx-host.inspect` or `sbx-host.seed`.
 6. Have the VM agent read the repository's `AGENTS.md`, `README.md`, and
    package metadata to determine setup and validation commands.
-7. When a setup command needs Azure Artifacts authentication, run it from the
-   trusted host without exposing the token to Copilot:
-
-   Call `sbx-host.ado_install` with the package manager and install arguments.
-
-   After `ado-install` returns and the PAT is gone, run any repository-required
-   rebuild, postinstall, code generation, or setup command normally inside the
-   VM.
-
+   Seed creates user-local Corepack shims when Corepack is available, so
+   repo-pinned Yarn and pnpm commands work without system installation.
+7. If the VM agent reports that a private Azure Artifacts restore is required,
+   call `sbx-host.ado_install` with the exact package-manager command it reports.
+   Run rebuild, postinstall, code generation, or setup afterward in the VM,
+   after the PAT is gone.
 8. If Balanced networking blocks a required package or API host, inspect the
    Docker policy log and add only the required sandbox-scoped rule:
 

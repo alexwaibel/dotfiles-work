@@ -251,6 +251,29 @@ seed() {
   run "$sbx" cp "$(win_path "$seed_bundle")" "$sandbox:/tmp/${repo}.bundle"
   sbx_exec_shell "$sbx" "$sandbox" \
     "git clone --branch $(printf '%q' "$base_branch") /tmp/$(printf '%q' "$repo").bundle $(printf '%q' "$repo_dir") && git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch")"
+  sbx_exec_shell "$sbx" "$sandbox" \
+    'if command -v corepack >/dev/null 2>&1; then
+       mkdir -p "$HOME/.local/bin"
+       corepack enable --install-directory "$HOME/.local/bin" || echo "warning: corepack shims unavailable" >&2
+       rm -f "$HOME/.local/bin/yarn"
+       cat >"$HOME/.local/bin/yarn" <<'"'"'EOF'"'"'
+#!/usr/bin/env bash
+dir="$PWD"
+while [[ "$dir" != / ]]; do
+  yarn_path="$(sed -n "s/^yarnPath:[[:space:]]*//p" "$dir/.yarnrc.yml" 2>/dev/null | head -n1)"
+  yarn_path="${yarn_path#\"}"
+  yarn_path="${yarn_path%\"}"
+  if [[ -n "$yarn_path" ]]; then
+    [[ "$yarn_path" = /* ]] || yarn_path="$dir/$yarn_path"
+    [[ -f "$yarn_path" ]] && exec node "$yarn_path" "$@"
+  fi
+  dir="${dir%/*}"
+  [[ -n "$dir" ]] || dir=/
+done
+exec corepack yarn "$@"
+EOF
+       chmod u+x "$HOME/.local/bin/yarn"
+     fi'
   run rm -f "$seed_bundle"
 
   if ! $dry_run; then
@@ -348,6 +371,29 @@ ado_install() {
       ;;
   esac
 
+  local package_runner
+  package_runner='
+cd "$1"
+shift
+manager="$1"
+shift
+case "$manager" in
+  yarn)
+    yarn_path="$(sed -n "s/^yarnPath:[[:space:]]*//p" .yarnrc.yml 2>/dev/null | head -n1)"
+    if [ -n "$yarn_path" ] && [ -f "$yarn_path" ]; then
+      exec node "$PWD/$yarn_path" "$@"
+    fi
+    if command -v yarn >/dev/null 2>&1; then
+      exec yarn "$@"
+    fi
+    exec corepack yarn "$@"
+    ;;
+  npm|pnpm)
+    exec "$manager" "$@"
+    ;;
+esac
+'
+
   local sbx sandbox repo repo_dir repo_path organization
   sbx="$(find_sbx)"
   sandbox="$(state_value "$id" '.sandbox')"
@@ -364,7 +410,7 @@ ado_install() {
       -e npm_config_ignore_scripts=true \
       -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
       "$sandbox" -- \
-      bash -lc 'cd "$1" && shift && exec "$@"' bash "$repo_dir" "${install_command[@]}"
+      bash -lc "$package_runner" bash "$repo_dir" "${install_command[@]}"
     printf '\n'
     return
   fi
@@ -385,7 +431,7 @@ ado_install() {
     -e npm_config_ignore_scripts=true \
     -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
     "$sandbox" -- \
-    bash -lc 'cd "$1" && shift && exec "$@"' bash "$repo_dir" "${install_command[@]}"
+    bash -lc "$package_runner" bash "$repo_dir" "${install_command[@]}"
   unset token ADO_NPM_TOKEN
 }
 
