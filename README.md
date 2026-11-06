@@ -132,7 +132,8 @@ Windows credential store and is injected by Docker's proxy rather than copied in
 
 The WSL `sbx-host` MCP bridge fills only the current WSL integration gaps. Invoke the
 `sandbox-work` skill from a Copilot session; it uses schema-constrained host tools for seed,
-package restore, export, and sync. Attach to the resulting VM from Windows Terminal:
+export, and sync. Seed restores detected Azure Artifacts dependencies before the agent starts.
+Attach to the resulting VM from Windows Terminal:
 
 ```powershell
 sbx run --name wi-<work-item>-vm

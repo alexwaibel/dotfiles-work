@@ -102,7 +102,7 @@ test("lists the constrained tool surface", async t => {
   const response = await readMessage(process);
   assert.deepEqual(
     response.result.tools.map(tool => tool.name).sort(),
-    ["ado_install", "export", "inspect", "seed", "sync"],
+    ["export", "inspect", "seed", "sync"],
   );
 });
 
@@ -155,49 +155,6 @@ test("seed validates inputs and invokes helper without a shell", async t => {
         workItem: 123,
         slug: "../escape",
         repo: "example-repo",
-      },
-    },
-  });
-  const invalid = await readMessage(process);
-  assert.equal(invalid.result.isError, true);
-});
-
-test("ado_install exposes only supported package managers", async t => {
-  const paths = await fixture();
-  const process = startServer(paths);
-  t.after(() => process.kill());
-  await initialize(process);
-
-  send(process, {
-    jsonrpc: "2.0",
-    id: 2,
-    method: "tools/call",
-    params: {
-      name: "ado_install",
-      arguments: {
-        workItem: 123,
-        packageManager: "yarn",
-        args: ["install", "--immutable"],
-      },
-    },
-  });
-  const response = await readMessage(process);
-  assert.equal(response.result.isError, undefined);
-  assert.match(
-    response.result.content[0].text,
-    /helper: ado-install 123 -- yarn install --immutable/,
-  );
-
-  send(process, {
-    jsonrpc: "2.0",
-    id: 3,
-    method: "tools/call",
-    params: {
-      name: "ado_install",
-      arguments: {
-        workItem: 123,
-        packageManager: "bash",
-        args: ["-c", "id"],
       },
     },
   });

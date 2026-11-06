@@ -27,8 +27,6 @@ const maxBuffer = 8 * 1024 * 1024;
 const maxResult = 32 * 1024;
 const timeout = 15 * 60 * 1000;
 
-let operationInProgress = false;
-
 const workItemSchema = z.number().int().positive();
 const slugSchema = z
   .string()
@@ -71,24 +69,16 @@ async function validateCanonicalRepo(repo) {
 }
 
 async function runHelper(args) {
-  if (operationInProgress) {
-    throw new Error("Another sbx-host operation is already running");
-  }
-  operationInProgress = true;
-  try {
-    const { stdout, stderr } = await execFileAsync("/usr/bin/bash", [helper, ...args], {
-      cwd: home,
-      encoding: "utf8",
-      maxBuffer,
-      timeout,
-      windowsHide: true,
-    });
-    return truncateOutput(
-      [stdout.trim(), stderr.trim()].filter(Boolean).join("\n"),
-    );
-  } finally {
-    operationInProgress = false;
-  }
+  const { stdout, stderr } = await execFileAsync("/usr/bin/bash", [helper, ...args], {
+    cwd: home,
+    encoding: "utf8",
+    maxBuffer,
+    timeout,
+    windowsHide: true,
+  });
+  return truncateOutput(
+    [stdout.trim(), stderr.trim()].filter(Boolean).join("\n"),
+  );
 }
 
 async function inspectState(workItem) {
@@ -139,7 +129,7 @@ server.registerTool(
   "seed",
   {
     description:
-      "Create a constrained mountless Docker Sandbox seed for an ADO work item using a canonical repository.",
+      "Create a constrained mountless Docker Sandbox seed and pre-restore detected Azure Artifacts dependencies before agent startup.",
     inputSchema: {
       workItem: workItemSchema,
       slug: slugSchema,
@@ -151,34 +141,6 @@ server.registerTool(
       await validateCanonicalRepo(repo);
       return result(
         await runHelper(["seed", String(workItem), slug, repo]),
-      );
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "ado_install",
-  {
-    description:
-      "Run a constrained package installation in the work-item sandbox with a short-lived Azure Artifacts token and lifecycle scripts disabled.",
-    inputSchema: {
-      workItem: workItemSchema,
-      packageManager: z.enum(["yarn", "npm", "pnpm"]),
-      args: z.array(z.string().max(256)).max(32).default([]),
-    },
-  },
-  async ({ workItem, packageManager, args }) => {
-    try {
-      return result(
-        await runHelper([
-          "ado-install",
-          String(workItem),
-          "--",
-          packageManager,
-          ...args,
-        ]),
       );
     } catch (error) {
       return result(formatError(error), true);

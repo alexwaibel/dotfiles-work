@@ -1,6 +1,6 @@
 ---
 name: sandbox-work
-description: Run an ADO coding task through an isolated Docker Sandbox VM using the sbx-work helper. Use when the user says "sandbox work item", "Docker sandbox workflow", "run this bug in sbx", or wants an autonomous implementation isolated from the host.
+description: Coordinate an ADO coding task through an isolated Docker Sandbox VM. Use when the user says "sandbox work item", "Docker sandbox workflow", "run this bug in sbx", or wants implementation isolated from the host.
 ---
 
 # Sandbox Work
@@ -26,7 +26,7 @@ The VM owns:
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
 Azure Artifacts credentials may be passed only to the constrained
-`sbx-host.ado_install` package-manager process. Lifecycle scripts are disabled
+package-manager process used by `sbx-host.seed`. Lifecycle scripts are disabled
 while that short-lived package-read PAT exists.
 
 ## Procedure
@@ -37,7 +37,11 @@ while that short-lived package-read PAT exists.
    - If metadata exists, verify the repository, branch, base, and VM path, then
      resume that sandbox. Do not seed again.
    - If metadata is absent, identify the repository and slug, then call
-     `sbx-host.seed`.
+     `sbx-host.seed`. Seed automatically restores dependencies when the
+     canonical repository declares a supported package manager and configures
+     an Azure Artifacts registry.
+   - Seed automatically replaces stale, unexported metadata when its sandbox no
+     longer exists. It preserves metadata that references exported host work.
 4. Ask the user to attach from Windows Terminal:
 
    ```powershell
@@ -50,10 +54,8 @@ while that short-lived package-read PAT exists.
    package metadata to determine setup and validation commands.
    Seed creates user-local Corepack shims when Corepack is available, so
    repo-pinned Yarn and pnpm commands work without system installation.
-7. If the VM agent reports that a private Azure Artifacts restore is required,
-   call `sbx-host.ado_install` with the exact package-manager command it reports.
-   Run rebuild, postinstall, code generation, or setup afterward in the VM,
-   after the PAT is gone.
+7. Run repository-required rebuild, postinstall, code generation, or setup
+   inside the VM after the seed restore, when the PAT is gone.
 8. If Balanced networking blocks a required package or API host, inspect the
    Docker policy log and add only the required sandbox-scoped rule:
 
@@ -96,6 +98,8 @@ while that short-lived package-read PAT exists.
 - A reboot or daemon restart should not require recreating the sandbox.
 - Interactive attachment always remains user-run from Windows Terminal; the
   host MCP bridge cannot proxy the VM's TTY.
+- Seed is atomic: an incomplete new sandbox is removed and no metadata is
+  retained. Retry seed after correcting the reported failure.
 - If Copilot reports expired or unauthorized credentials, ask the user to run:
 
   ```powershell
@@ -119,18 +123,6 @@ while that short-lived package-read PAT exists.
 ## Repository behavior
 
 The `sbx-host` MCP server is the constrained host bridge. It exposes only
-`inspect`, `seed`, `ado_install`, `export`, and `sync`; modifying tools require
-explicit approval. The underlying `sbx-work` CLI remains an implementation
-detail for bundle transfer and constrained Azure Artifacts package installation.
-Lifecycle, policy, diagnostics, and removal remain native `sbx` operations.
-
-## Local Copilot sandbox
-
-Windows executables require WSL interop through `/init` and `/run/WSL`.
-Granting those paths would let a sandboxed process launch arbitrary Windows
-programs and would defeat the host filesystem boundary.
-
-Use the unsandboxed, schema-constrained `sbx-host` MCP bridge for supported host
-operations. Never add `/init`, `/run/WSL`, or broad `/mnt/c` access to the local
-sandbox policy. Native lifecycle operations that the bridge does not expose
-must be run by the user from Windows Terminal.
+`inspect`, `seed`, `export`, and `sync`; modifying tools require explicit
+approval. Lifecycle, policy, diagnostics, and removal remain native `sbx`
+operations run by the user from Windows Terminal.

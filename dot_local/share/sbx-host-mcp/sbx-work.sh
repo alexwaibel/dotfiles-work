@@ -15,16 +15,13 @@ usage() {
   cat <<'EOF'
 Usage:
   sbx-work [--dry-run] seed WORK_ITEM SLUG [REPO]
-  sbx-work [--dry-run] ado-install WORK_ITEM -- PACKAGE_MANAGER [ARG...]
   sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
 
 Commands:
   seed      Work around broken WSL clone mode by seeding a mountless sandbox
-            from a verified Git bundle and creating the task branch.
-  ado-install
-            Run a package install with a process-scoped Azure Artifacts token
-            and package lifecycle scripts disabled.
+            from a verified Git bundle, creating the task branch, and restoring
+            detected Azure Artifacts dependencies before agent startup.
   export    Bundle committed VM work into a standard host worktree and rebase.
   sync      Transfer the rebased host branch back into the VM.
 
@@ -35,8 +32,8 @@ Use native sbx commands for everything else:
   sbx stop wi-<id>-vm
   sbx rm wi-<id>-vm
 
-REPO defaults to the current Git repository name. Repository setup, test, and
-validation commands remain the coding agent's responsibility.
+REPO defaults to the current Git repository name. Postinstall, rebuild, setup,
+test, and validation commands remain the coding agent's responsibility.
 EOF
 }
 
@@ -82,6 +79,34 @@ find_sbx() {
   local windows_sbx="/mnt/c/Users/${USER}/AppData/Local/DockerSandboxes/bin/sbx.exe"
   [[ -x "$windows_sbx" ]] || die "sbx.exe not found; set SBX_WORK_SBX_BIN"
   printf '%s\n' "$windows_sbx"
+}
+
+sandbox_exists() {
+  local sbx="$1"
+  local sandbox="$2"
+  "$sbx" ls -q | tr -d '\r' | grep -Fxq "$sandbox"
+}
+
+clear_stale_state() {
+  local id="$1"
+  local sbx="$2"
+  local sandbox="$3"
+  local file
+  file="$(state_file "$id")"
+  [[ -f "$file" ]] || return 0
+
+  local recorded_sandbox
+  recorded_sandbox="$(jq -er '.sandbox' "$file")"
+  [[ "$recorded_sandbox" == "$sandbox" ]] ||
+    die "metadata sandbox mismatch for work item $id"
+  sandbox_exists "$sbx" "$sandbox" &&
+    die "metadata and sandbox already exist for work item $id"
+  jq -e 'has("hostWorktree") or has("exportedCommit") or has("syncedCommit")' \
+    "$file" >/dev/null &&
+    die "stale metadata has exported host work; remove it manually after review: $file"
+
+  note "removing stale unexported metadata for absent sandbox $sandbox"
+  rm -f "$file"
 }
 
 validate_work_item() {
@@ -194,6 +219,45 @@ sbx_exec_shell() {
   run "$sbx" exec "$sandbox" -- bash -lc "$command"
 }
 
+uses_azure_artifacts() {
+  local repo_path="$1"
+  local config
+  for config in "$repo_path/.npmrc" "$repo_path/.yarnrc.yml"; do
+    [[ -f "$config" ]] || continue
+    grep -Eq 'pkgs\.(dev\.azure\.com|visualstudio\.com)' "$config" && return 0
+  done
+  return 1
+}
+
+detect_install_command() {
+  local repo_path="$1"
+  [[ -f "$repo_path/package.json" ]] || return 1
+  local declared
+  declared="$(jq -r '.packageManager // empty' "$repo_path/package.json")"
+
+  case "$declared" in
+    yarn@*)
+      local yarn_version="${declared#yarn@}"
+      local yarn_major="${yarn_version%%.*}"
+      if [[ "$yarn_major" =~ ^[0-9]+$ ]] && ((yarn_major >= 2)); then
+        printf 'yarn\0install\0--immutable\0'
+      else
+        printf 'yarn\0install\0--frozen-lockfile\0'
+      fi
+      ;;
+    pnpm@*)
+      printf 'pnpm\0install\0--frozen-lockfile\0'
+      ;;
+    npm@*)
+      [[ -f "$repo_path/package-lock.json" ]] || return 1
+      printf 'npm\0ci\0'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 ado_organization() {
   local repo_path="$1"
   local remote
@@ -217,10 +281,6 @@ seed() {
   validate_work_item "$id"
   validate_slug "$slug"
 
-  local metadata
-  metadata="$(state_file "$id")"
-  [[ ! -e "$metadata" ]] || die "metadata already exists: $metadata"
-
   local repo_path sbx base_branch sandbox branch repo_dir
   repo_path="$(canonical_repo "$repo")"
   sbx="$(find_sbx)"
@@ -228,6 +288,15 @@ seed() {
   sandbox="wi-${id}-vm"
   branch="users/alwaibel/agent/${id}-${slug}"
   repo_dir="/home/agent/workspace/${repo}"
+
+  if ! $dry_run; then
+    clear_stale_state "$id" "$sbx" "$sandbox"
+    sandbox_exists "$sbx" "$sandbox" &&
+      die "sandbox already exists without metadata: $sandbox"
+  else
+    [[ ! -e "$(state_file "$id")" ]] ||
+      die "metadata already exists: $(state_file "$id")"
+  fi
 
   ensure_canonical_ready "$repo_path" "$base_branch"
   git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch" &&
@@ -241,17 +310,42 @@ seed() {
   local base_sha
   base_sha="$(git -C "$repo_path" rev-parse "$base_branch")"
 
+  local -a install_command=()
+  if uses_azure_artifacts "$repo_path"; then
+    mapfile -d '' -t install_command < <(detect_install_command "$repo_path")
+    ((${#install_command[@]} > 0)) ||
+      die "Azure Artifacts is configured but package.json has no supported packageManager"
+  fi
+
   local seed_bundle="${state_root}/${id}-seed.bundle"
   run git -C "$repo_path" bundle create "$seed_bundle" "$base_branch"
   run git -C "$repo_path" bundle verify "$seed_bundle"
 
+  local seed_started=false
+  cleanup_incomplete_seed() {
+    if $seed_started && ! $dry_run; then
+      note "cleaning incomplete sandbox $sandbox"
+      "$sbx" rm --force "$sandbox" >/dev/null 2>&1 || true
+      rm -f "$(state_file "$id")"
+    fi
+    rm -f "$seed_bundle"
+  }
+  seed_step() {
+    local exit_code
+    "$@" && return 0
+    exit_code=$?
+    cleanup_incomplete_seed
+    return "$exit_code"
+  }
+
   note "creating mountless sandbox $sandbox"
-  run "$sbx" create --name "$sandbox" copilot
-  run "$sbx" run -d --name "$sandbox"
-  run "$sbx" cp "$(win_path "$seed_bundle")" "$sandbox:/tmp/${repo}.bundle"
-  sbx_exec_shell "$sbx" "$sandbox" \
+  seed_started=true
+  seed_step run "$sbx" create --name "$sandbox" copilot
+  seed_step run "$sbx" run -d --name "$sandbox"
+  seed_step run "$sbx" cp "$(win_path "$seed_bundle")" "$sandbox:/tmp/${repo}.bundle"
+  seed_step sbx_exec_shell "$sbx" "$sandbox" \
     "git clone --branch $(printf '%q' "$base_branch") /tmp/$(printf '%q' "$repo").bundle $(printf '%q' "$repo_dir") && git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch")"
-  sbx_exec_shell "$sbx" "$sandbox" \
+  seed_step sbx_exec_shell "$sbx" "$sandbox" \
     'if command -v corepack >/dev/null 2>&1; then
        mkdir -p "$HOME/.local/bin"
        corepack enable --install-directory "$HOME/.local/bin" || echo "warning: corepack shims unavailable" >&2
@@ -274,10 +368,16 @@ exec corepack yarn "$@"
 EOF
        chmod u+x "$HOME/.local/bin/yarn"
      fi'
-  run rm -f "$seed_bundle"
+
+  if ((${#install_command[@]} > 0)); then
+    note "restoring private dependencies before agent startup"
+    seed_step restore_private_dependencies \
+      "$id" "$sbx" "$sandbox" "$repo_dir" "$repo_path" \
+      "${install_command[@]}"
+  fi
 
   if ! $dry_run; then
-    write_state "$id" \
+    seed_step write_state "$id" \
       --arg id "$id" \
       --arg slug "$slug" \
       --arg repo "$repo" \
@@ -297,109 +397,38 @@ EOF
         repoDir: $repoDir
       }'
   fi
+  seed_step run rm -f "$seed_bundle"
+  seed_started=false
 
   note "seeded $sandbox"
   printf 'Attach: sbx run --name %s\n' "$sandbox"
   printf 'Then run: /cwd %s\n' "$repo_dir"
 }
 
-validate_install_command() {
-  local executable="${1##*/}"
-  shift
-  case "$executable" in
-    yarn)
-      if (($# > 0)) && [[ "$1" == "install" ]]; then
-        shift
-      elif (($# > 0)) && [[ "$1" != -* ]]; then
-        die "yarn command must be install or install flags"
-      fi
-      local yarn_argument
-      for yarn_argument in "$@"; do
-        case "$yarn_argument" in
-          --immutable | --immutable-cache | --refresh-lockfile | --check-cache | \
-            --check-resolutions | --inline-builds | --json | --mode=skip-builds)
-            ;;
-          *)
-            die "unsupported yarn install argument: $yarn_argument"
-            ;;
-        esac
-      done
-      ;;
-    npm | pnpm)
-      (($# > 0)) || die "$executable requires install or ci"
-      [[ "$1" == "install" || "$1" == "ci" ]] ||
-        die "$executable command must be install or ci"
-      shift
-      local npm_argument
-      for npm_argument in "$@"; do
-        case "$npm_argument" in
-          --ignore-scripts | --no-audit | --no-fund | --prefer-offline | \
-            --offline | --frozen-lockfile | --lockfile-only | \
-            --package-lock-only | --prod | --production | \
-            --omit=dev | --omit=optional | --omit=peer | \
-            --include=dev | --include=optional | --include=peer)
-            ;;
-          *)
-            die "unsupported $executable install argument: $npm_argument"
-            ;;
-        esac
-      done
-      ;;
-    *)
-      die "unsupported package manager: $executable"
-      ;;
-  esac
+readonly PACKAGE_RUNNER='
+cd "$1"
+shift
+export PATH="$HOME/.local/bin:$PATH"
+exec "$@"
+'
 
-}
-
-ado_install() {
+restore_private_dependencies() {
   local id="$1"
-  shift
-  [[ "${1:-}" == "--" ]] || die "ado-install requires -- before PACKAGE_MANAGER"
-  shift
-  (($# > 0)) || die "ado-install requires PACKAGE_MANAGER"
-  validate_work_item "$id"
-  validate_install_command "$@"
+  local sbx="$2"
+  local sandbox="$3"
+  local repo_dir="$4"
+  local repo_path="$5"
+  shift 5
   local executable="${1##*/}"
   local -a install_command=("$@")
   case "$executable" in
-    yarn)
-      install_command+=("--mode=skip-builds")
-      ;;
+    yarn) ;;
     npm | pnpm)
       install_command+=("--ignore-scripts")
       ;;
   esac
 
-  local package_runner
-  package_runner='
-cd "$1"
-shift
-manager="$1"
-shift
-case "$manager" in
-  yarn)
-    yarn_path="$(sed -n "s/^yarnPath:[[:space:]]*//p" .yarnrc.yml 2>/dev/null | head -n1)"
-    if [ -n "$yarn_path" ] && [ -f "$yarn_path" ]; then
-      exec node "$PWD/$yarn_path" "$@"
-    fi
-    if command -v yarn >/dev/null 2>&1; then
-      exec yarn "$@"
-    fi
-    exec corepack yarn "$@"
-    ;;
-  npm|pnpm)
-    exec "$manager" "$@"
-    ;;
-esac
-'
-
-  local sbx sandbox repo repo_dir repo_path organization
-  sbx="$(find_sbx)"
-  sandbox="$(state_value "$id" '.sandbox')"
-  repo="$(state_value "$id" '.repo')"
-  repo_dir="$(state_value "$id" '.repoDir')"
-  repo_path="$(canonical_repo "$repo")"
+  local organization
   organization="$(ado_organization "$repo_path")"
 
   if $dry_run; then
@@ -410,7 +439,7 @@ esac
       -e npm_config_ignore_scripts=true \
       -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
       "$sandbox" -- \
-      bash -lc "$package_runner" bash "$repo_dir" "${install_command[@]}"
+      bash -lc "$PACKAGE_RUNNER" bash "$repo_dir" "${install_command[@]}"
     printf '\n'
     return
   fi
@@ -431,7 +460,7 @@ esac
     -e npm_config_ignore_scripts=true \
     -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
     "$sandbox" -- \
-    bash -lc "$package_runner" bash "$repo_dir" "${install_command[@]}"
+    bash -lc "$PACKAGE_RUNNER" bash "$repo_dir" "${install_command[@]}"
   unset token ADO_NPM_TOKEN
 }
 
@@ -551,11 +580,6 @@ case "$command_name" in
     (($# >= 2 && $# <= 3)) || die "seed requires WORK_ITEM SLUG [REPO]"
     acquire_lock
     seed "$@"
-    ;;
-  ado-install)
-    (($# >= 3)) || die "ado-install requires WORK_ITEM -- PACKAGE_MANAGER [ARG...]"
-    acquire_lock
-    ado_install "$@"
     ;;
   export)
     (($# == 1)) || die "export requires WORK_ITEM"

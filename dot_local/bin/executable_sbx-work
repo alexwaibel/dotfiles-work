@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-exec node "$HOME/.local/share/sbx-host-mcp/cli.mjs" "$@"
+exec bash "$HOME/.local/share/sbx-host-mcp/sbx-work.sh" "$@"
