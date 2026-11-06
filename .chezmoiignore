@@ -16,6 +16,7 @@ install-sbx-host-mcp.sh
 .chezmoiscripts/80-configure-linux-user.sh
 .chezmoiscripts/install-doom-emacs.sh
 .chezmoiscripts/install-sbx-host-mcp.sh
+.chezmoiscripts/install-sbx-git-shim.ps1
 .chezmoiscripts/wire-bashrc-wsl-customization.sh
 .ssh/agent-bridge.sh
 .ssh-agent/known_hosts
@@ -23,6 +24,8 @@ install-sbx-host-mcp.sh
 .local/bin/sbx-work
 .local/share/sbx-host-mcp
 .local/share/sbx-host-mcp/**
+.local/share/sbx-git-shim
+.local/share/sbx-git-shim/**
 .config/doom
 .config/doom/**
 {{ end }}

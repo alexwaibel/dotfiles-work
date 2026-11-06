@@ -1,0 +1,36 @@
+{{- if eq .chezmoi.os "windows" }}
+# SbxGitShim source hash: {{ include "dot_local/share/sbx-git-shim/SbxGitShim.cs" | sha256sum }}
+
+#Requires -Version 5.1
+$ErrorActionPreference = 'Stop'
+
+$source = Join-Path $env:USERPROFILE '.local\share\sbx-git-shim\SbxGitShim.cs'
+$installDir = Join-Path $env:LOCALAPPDATA 'DockerSandboxes\compat'
+$destination = Join-Path $installDir 'git.exe'
+$temporary = Join-Path $installDir "git-$PID.exe"
+
+if (-not (Test-Path 'C:\Program Files\Git\cmd\git.exe')) {
+    throw 'Windows Git was not found at C:\Program Files\Git\cmd\git.exe.'
+}
+
+New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+Add-Type -Path $source -OutputAssembly $temporary -OutputType ConsoleApplication
+Move-Item -Force $temporary $destination
+
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$pathEntries = @($userPath -split ';' | Where-Object {
+    $_ -and $_.TrimEnd('\') -ne $installDir.TrimEnd('\')
+})
+[Environment]::SetEnvironmentVariable(
+    'Path',
+    (@($installDir) + $pathEntries) -join ';',
+    'User'
+)
+$env:PATH = "$installDir;$env:PATH"
+
+if (Get-Command sbx -ErrorAction SilentlyContinue) {
+    sbx daemon restart
+}
+{{- else }}
+# Windows-only Docker Sandboxes Git compatibility shim.
+{{- end }}

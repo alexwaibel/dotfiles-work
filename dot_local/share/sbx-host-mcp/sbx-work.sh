@@ -23,9 +23,8 @@ Usage:
 
 Commands:
   inspect   Report transfer metadata and whether its sandbox still exists.
-  seed      Work around broken WSL clone mode by seeding a mountless sandbox
-            from a verified Git bundle, creating the task branch, and restoring
-            detected Azure Artifacts dependencies before agent startup.
+  seed      Create a native clone-mode sandbox, create the task branch, and
+            restore detected Azure Artifacts dependencies before agent startup.
   dispatch  Run one noninteractive Copilot task in the existing sandbox.
   export    Bundle committed VM work into a standard host worktree and rebase.
   sync      Transfer the rebased host branch back into the VM.
@@ -91,7 +90,43 @@ sbx_call() {
   shift
   local command="$1"
   shift
-  "$sbx" "$command" --no-input "$@"
+  local shim_dir="/mnt/c/Users/${USER}/AppData/Local/DockerSandboxes/compat"
+  if [[ "$sbx" == *.exe && -x "$shim_dir/git.exe" ]]; then
+    WSLENV="${WSLENV:+${WSLENV}:}PATH/lp" PATH="$shim_dir" \
+      "$sbx" "$command" --no-input "$@"
+  else
+    "$sbx" "$command" --no-input "$@"
+  fi
+}
+
+windows_git_command() {
+  local git_bin="${SBX_WORK_WINDOWS_GIT_BIN:-git.exe}"
+  local shim_dir="/mnt/c/Users/${USER}/AppData/Local/DockerSandboxes/compat"
+  if [[ "$git_bin" == *.exe && -x "$shim_dir/git.exe" ]]; then
+    PATH="$shim_dir:$PATH" "$git_bin" "$@"
+  else
+    "$git_bin" "$@"
+  fi
+}
+
+windows_git() {
+  local repo_path="$1"
+  shift
+  if [[ "${SBX_WORK_WINDOWS_GIT_BIN:-git.exe}" == *.exe ]]; then
+    windows_git_command -C "$(win_path "$repo_path")" "$@"
+  else
+    windows_git_command -C "$repo_path" "$@"
+  fi
+}
+
+ensure_windows_safe_directory() {
+  local repo_path="$1"
+  local safe_directory
+  safe_directory="%(prefix)/$(wslpath -m "$repo_path")"
+  if ! windows_git_command config --global --fixed-value --get-all \
+    safe.directory "$safe_directory" >/dev/null 2>&1; then
+    windows_git_command config --global --add safe.directory "$safe_directory"
+  fi
 }
 
 sandbox_exists() {
@@ -386,7 +421,7 @@ seed() {
   base_branch="$(discover_base_branch "$repo_path")"
   sandbox="wi-${id}-vm"
   branch="users/alwaibel/agent/${id}-${slug}"
-  repo_dir="/home/agent/workspace/${repo}"
+  repo_dir=""
   git_name="$(git -C "$repo_path" config user.name)"
   git_email="$(git -C "$repo_path" config user.email)"
   [[ -n "$git_name" && -n "$git_email" ]] ||
@@ -402,6 +437,9 @@ seed() {
   fi
 
   ensure_canonical_ready "$repo_path" "$base_branch"
+  if [[ "$sbx" == *.exe ]]; then
+    ensure_windows_safe_directory "$repo_path"
+  fi
   git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch" &&
     die "local branch already exists: $branch"
   git -C "$repo_path" show-ref --verify --quiet "refs/remotes/origin/$branch" &&
@@ -420,10 +458,6 @@ seed() {
       die "Azure Artifacts is configured but package.json has no supported packageManager"
   fi
 
-  local seed_bundle="${state_root}/${id}-seed.bundle"
-  run git -C "$repo_path" bundle create "$seed_bundle" "$base_branch"
-  run git -C "$repo_path" bundle verify "$seed_bundle"
-
   local seed_started=false
   cleanup_incomplete_seed() {
     if $seed_started && ! $dry_run; then
@@ -431,7 +465,6 @@ seed() {
       sbx_call "$sbx" rm --force "$sandbox" >/dev/null 2>&1 || true
       rm -f "$(state_file "$id")"
     fi
-    rm -f "$seed_bundle"
   }
   seed_step() {
     local exit_code
@@ -444,14 +477,33 @@ seed() {
   note "creating mountless sandbox $sandbox"
   seed_started=true
   seed_step run sbx_call "$sbx" create \
+    --clone \
     --name "$sandbox" \
     --static-mcp none \
     --skills off \
-    copilot
+    copilot \
+    "$(win_path "$repo_path")"
   seed_step run sbx_call "$sbx" run -d --name "$sandbox"
-  seed_step run sbx_call "$sbx" cp "$(win_path "$seed_bundle")" "$sandbox:/tmp/${repo}.bundle"
+  if $dry_run; then
+    run sbx_call "$sbx" exec "$sandbox" -- pwd
+    repo_dir="/workspace/${repo}"
+  else
+    local pwd_exit
+    set +e
+    repo_dir="$(sbx_call "$sbx" exec "$sandbox" -- pwd)"
+    pwd_exit=$?
+    set -e
+    if [[ "$pwd_exit" -ne 0 ]]; then
+      cleanup_incomplete_seed
+      return "$pwd_exit"
+    fi
+  fi
+  [[ "$repo_dir" == /* ]] || {
+    cleanup_incomplete_seed
+    die "sandbox clone returned an invalid workspace path"
+  }
   seed_step sbx_exec_shell "$sbx" "$sandbox" \
-    "git clone --branch $(printf '%q' "$base_branch") /tmp/$(printf '%q' "$repo").bundle $(printf '%q' "$repo_dir") && git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch") && git -C $(printf '%q' "$repo_dir") config user.name $(printf '%q' "$git_name") && git -C $(printf '%q' "$repo_dir") config user.email $(printf '%q' "$git_email")"
+    "git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch") && git -C $(printf '%q' "$repo_dir") config user.name $(printf '%q' "$git_name") && git -C $(printf '%q' "$repo_dir") config user.email $(printf '%q' "$git_email")"
   seed_step sbx_exec_shell "$sbx" "$sandbox" \
     'if command -v corepack >/dev/null 2>&1; then
        mkdir -p "$HOME/.local/bin"
@@ -495,6 +547,7 @@ EOF
       --arg baseBranch "$base_branch" \
       --arg baseSha "$base_sha" \
       --arg repoDir "$repo_dir" \
+      --arg transferMode "clone" \
       '{
         workItem: $id,
         slug: $slug,
@@ -503,15 +556,14 @@ EOF
         branch: $branch,
         baseBranch: $baseBranch,
         baseSha: $baseSha,
-        repoDir: $repoDir
+        repoDir: $repoDir,
+        transferMode: $transferMode
       }'
   fi
-  seed_step run rm -f "$seed_bundle"
   seed_started=false
 
   note "seeded $sandbox"
-  printf 'Attach: sbx run --name %s\n' "$sandbox"
-  printf 'Then run: /cwd %s\n' "$repo_dir"
+  printf 'Repository: %s\n' "$repo_dir"
 }
 
 readonly PACKAGE_RUNNER='
@@ -637,7 +689,7 @@ dispatch_task() {
 export_work() {
   local id="$1"
   validate_work_item "$id"
-  local sbx sandbox repo branch base_branch base_sha repo_dir slug repo_path
+  local sbx sandbox repo branch base_branch base_sha repo_dir slug repo_path transfer_mode
   sbx="$(find_sbx)"
   sandbox="$(state_value "$id" '.sandbox')"
   repo="$(state_value "$id" '.repo')"
@@ -646,6 +698,7 @@ export_work() {
   base_sha="$(state_value "$id" '.baseSha')"
   repo_dir="$(state_value "$id" '.repoDir')"
   slug="$(state_value "$id" '.slug')"
+  transfer_mode="$(state_value "$id" '.transferMode // "bundle"')"
   repo_path="$(canonical_repo "$repo")"
 
   local vm_status
@@ -656,12 +709,20 @@ export_work() {
   vm_head="$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)"
   [[ "$vm_head" != "$base_sha" ]] || die "sandbox branch has no commits to export"
 
-  local vm_bundle="/tmp/sbx-work-${id}.bundle"
-  local host_bundle="${state_root}/${id}-export.bundle"
-  sbx_exec_shell "$sbx" "$sandbox" \
-    "cd $(printf '%q' "$repo_dir") && git bundle create $(printf '%q' "$vm_bundle") $(printf '%q' "$branch") ^$(printf '%q' "$base_sha") && git bundle verify $(printf '%q' "$vm_bundle")"
-  run sbx_call "$sbx" cp "$sandbox:$vm_bundle" "$(win_path "$host_bundle")"
-  run git -C "$repo_path" bundle verify "$host_bundle"
+  local export_ref="refs/remotes/sbx-work/${id}"
+  local host_bundle=""
+  if [[ "$transfer_mode" == "clone" ]]; then
+    local sandbox_remote="sandbox-${sandbox}"
+    run windows_git "$repo_path" fetch \
+      "$sandbox_remote" "$branch:$export_ref"
+  else
+    local vm_bundle="/tmp/sbx-work-${id}.bundle"
+    host_bundle="${state_root}/${id}-export.bundle"
+    sbx_exec_shell "$sbx" "$sandbox" \
+      "cd $(printf '%q' "$repo_dir") && git bundle create $(printf '%q' "$vm_bundle") $(printf '%q' "$branch") ^$(printf '%q' "$base_sha") && git bundle verify $(printf '%q' "$vm_bundle")"
+    run sbx_call "$sbx" cp "$sandbox:$vm_bundle" "$(win_path "$host_bundle")"
+    run git -C "$repo_path" bundle verify "$host_bundle"
+  fi
   run git -C "$repo_path" fetch origin
 
   local worktree="${repos_root}/worktrees/${repo}/${id}-${slug}"
@@ -673,8 +734,9 @@ export_work() {
     fi
   fi
 
-  local export_ref="refs/remotes/sbx-work/${id}"
-  run git -C "$worktree" fetch "$host_bundle" "$branch:$export_ref"
+  if [[ "$transfer_mode" != "clone" ]]; then
+    run git -C "$worktree" fetch "$host_bundle" "$branch:$export_ref"
+  fi
   local original_patch_id
   original_patch_id="$(
     git -C "$worktree" diff "$base_sha" "$export_ref" |
@@ -694,7 +756,7 @@ export_work() {
   )"
   [[ "$rebased_patch_id" == "$original_patch_id" ]] ||
     die "rebased export changed the VM patch"
-  run rm -f "$host_bundle"
+  [[ -z "$host_bundle" ]] || run rm -f "$host_bundle"
 
   if ! $dry_run; then
     update_state "$id" \

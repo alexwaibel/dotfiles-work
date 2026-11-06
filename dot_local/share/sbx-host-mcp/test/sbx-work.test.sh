@@ -63,8 +63,8 @@ dry_run_output="$(
     SBX_WORK_SBX_BIN=/bin/true \
   bash "$script" --dry-run seed 123 valid-slug example-repo
 )"
-if [[ "$dry_run_output" == *"create --name wi-123-vm --static-mcp none --skills off copilot"* ]] &&
-  [[ "$dry_run_output" == *"wi-123-vm:/tmp/example-repo.bundle"* ]] &&
+if [[ "$dry_run_output" == *"create --clone --name wi-123-vm --static-mcp none --skills off copilot"* ]] &&
+  [[ "$dry_run_output" != *"example-repo.bundle"* ]] &&
   [[ "$dry_run_output" == *"users/alwaibel/agent/123-valid-slug"* ]] &&
   [[ "$dry_run_output" != *"ADO_NPM_TOKEN"* ]] &&
   [[ ! -e "${state_root}/123.json" ]]; then
@@ -95,6 +95,7 @@ printf '%s\n' "\$*" >>"$fake_sbx_log"
 if [[ "\${1:-}" == "exec" ]]; then
   printf 'forwarded:%s:%s\n' "\${WSLENV:-}" "\${#ADO_NPM_TOKEN}" >>"$fake_sbx_log"
   [[ "\$*" == *"copilot --yolo"* ]] && printf 'agent completed task\n'
+  [[ "\$*" == *"-- pwd" ]] && printf '/home/agent/workspace/example-repo\n'
 fi
 if [[ "\${1:-}" == "ls" ]]; then
   [[ -n "\${FAKE_SBX_LIST:-}" ]] && printf '%s\n' "\$FAKE_SBX_LIST"
@@ -110,7 +111,7 @@ SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_SBX_BIN="$fake_sbx" \
   bash "$script" seed 125 fresh-seed example-repo >/dev/null
 if [[ "$(jq -r '.slug' "${state_root}/125.json")" == "fresh-seed" ]] &&
-  grep -q '^create --name wi-125-vm --static-mcp none --skills off copilot$' "$fake_sbx_log"; then
+  grep -q '^create --clone --name wi-125-vm --static-mcp none --skills off copilot ' "$fake_sbx_log"; then
   printf 'PASS: replace stale unexported metadata\n'
   pass=$((pass + 1))
 else
@@ -350,7 +351,8 @@ cat >"${state_root}/130.json" <<EOF
   "branch": "$export_branch",
   "baseBranch": "master",
   "baseSha": "$export_base",
-  "repoDir": "/home/agent/workspace/export-repo"
+  "repoDir": "/home/agent/workspace/export-repo",
+  "transferMode": "clone"
 }
 EOF
 fake_export_sbx="${tmp_dir}/fake-export-sbx"
@@ -369,17 +371,42 @@ if [[ "$1" == "exec" ]]; then
   exit 0
 fi
 if [[ "$1" == "cp" ]]; then
-  cp "$FAKE_VM_BUNDLE" "$(wslpath -u "$3")"
+  if [[ "$2" == *:* ]]; then
+    cp "$FAKE_VM_BUNDLE" "$(wslpath -u "$3")"
+  fi
   exit 0
 fi
 exit 0
 EOF
 chmod u+x "$fake_export_sbx"
+fake_windows_git="${tmp_dir}/fake-windows-git"
+fake_windows_git_log="${tmp_dir}/fake-windows-git.log"
+cat >"$fake_windows_git" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$FAKE_WINDOWS_GIT_LOG"
+[[ "$1" == "-C" ]] || exit 2
+repo="$2"
+command="$3"
+case "$command" in
+  fetch)
+    git -C "$repo" fetch "$FAKE_VM_BUNDLE" "$5"
+    ;;
+  push)
+    exit 0
+    ;;
+  *)
+    git "$@"
+    ;;
+esac
+EOF
+chmod u+x "$fake_windows_git"
 FAKE_VM_COMMIT="$export_vm_commit" \
   FAKE_VM_BUNDLE="$export_bundle" \
+  FAKE_WINDOWS_GIT_LOG="$fake_windows_git_log" \
   SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_STATE_ROOT="$state_root" \
   SBX_WORK_SBX_BIN="$fake_export_sbx" \
+  SBX_WORK_WINDOWS_GIT_BIN="$fake_windows_git" \
   bash "$script" export 130 >/dev/null
 export_worktree="${repos_root}/worktrees/export-repo/130-export-topology"
 exported_head="$(git -C "$export_worktree" rev-parse HEAD)"
@@ -392,6 +419,20 @@ if git -C "$export_worktree" merge-base --is-ancestor \
   pass=$((pass + 1))
 else
   printf 'FAIL: export rebases VM commit after advanced base\n'
+  fail=$((fail + 1))
+fi
+
+FAKE_VM_COMMIT="$exported_head" \
+  FAKE_VM_BUNDLE="$export_bundle" \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_export_sbx" \
+  bash "$script" sync 130 >/dev/null
+if [[ "$(jq -r '.syncedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
+  printf 'PASS: exceptional sync uses verified bundle\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: exceptional sync uses verified bundle\n'
   fail=$((fail + 1))
 fi
 

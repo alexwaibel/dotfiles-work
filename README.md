@@ -132,6 +132,10 @@ Windows credential store and is injected by Docker's proxy rather than copied in
 The Windows user-configuration script disables sandbox SSH-agent forwarding, host-browser
 opening, FUSE/SYS_ADMIN, and Docker telemetry, then restarts the daemon. Those managed
 settings are intentionally not repeated as manual setup commands here.
+Chezmoi also installs a narrow Windows Git compatibility shim for Docker
+Sandboxes v0.51 with Git 2.56. It changes only Docker's invalid
+`-c core.hooksPath=` override to `core.hooksPath=NUL`, enabling native clone mode
+for allowlisted WSL repositories.
 
 The WSL `sbx-host` MCP bridge fills only the current WSL integration gaps. Invoke the
 `sandbox-work` skill from a Copilot session; it uses schema-constrained host tools for seed,

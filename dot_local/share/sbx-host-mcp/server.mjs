@@ -279,7 +279,7 @@ server.registerTool(
   "seed",
   {
     description:
-      "Create a constrained mountless Docker Sandbox seed and pre-restore detected Azure Artifacts dependencies before agent startup.",
+      "Create a constrained native clone-mode Docker Sandbox and pre-restore detected Azure Artifacts dependencies before agent startup.",
     inputSchema: {
       workItem: workItemSchema,
       slug: slugSchema,

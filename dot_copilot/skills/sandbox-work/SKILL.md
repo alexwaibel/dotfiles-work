@@ -6,7 +6,7 @@ description: Coordinate an ADO coding task through an isolated Docker Sandbox VM
 # Sandbox Work
 
 Coordinate a work item from the trusted host while plain Copilot performs code
-investigation and implementation inside a mountless Docker Sandbox VM.
+investigation and implementation inside a Docker Sandbox private clone.
 
 ## Trust boundary
 
@@ -25,6 +25,10 @@ The VM owns:
 - commits on `users/alwaibel/agent/*`
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
+Clone mode mounts the canonical repository read-only at `/run/sandbox/source`;
+the agent can inspect all files there, including ignored and untracked files,
+but works in a separate private clone and cannot modify the host repository.
+Keep secrets and unrelated sensitive files out of canonical repository trees.
 Azure Artifacts credentials may be passed only to the constrained
 package-manager process used by `sbx-host.seed`. The PAT is acquired through
 Windows AzureAuth so Conditional Access uses the authenticated Windows session.
@@ -139,4 +143,7 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 The `sbx-host` MCP server is the constrained host bridge. It exposes only
 seed/inspection, bounded Copilot dispatch/status/logs/cancel, export, and
 exceptional sync. It does not expose arbitrary host commands or paths.
-Lifecycle, policy, diagnostics, and removal remain native `sbx` operations.
+Native clone mode provides the private VM repository and managed host fetch
+remote; a narrow Windows Git compatibility shim works around Docker v0.51
+passing an invalid empty `core.hooksPath` to Git 2.56. Lifecycle, policy,
+diagnostics, and removal remain native `sbx` operations.
