@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { realpath, readFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -14,10 +14,6 @@ const execFileAsync = promisify(execFile);
 const home = homedir();
 const reposRoot = resolve(
   process.env.SBX_HOST_REPOS_ROOT || join(home, "repos"),
-);
-const stateRoot = resolve(
-  process.env.SBX_HOST_STATE_ROOT ||
-    join(process.env.XDG_STATE_HOME || join(home, ".local", "state"), "sbx-work"),
 );
 const packageRoot = dirname(fileURLToPath(import.meta.url));
 const helper = resolve(
@@ -81,29 +77,6 @@ async function runHelper(args) {
   );
 }
 
-async function inspectState(workItem) {
-  const statePath = join(stateRoot, `${workItem}.json`);
-  const parsed = JSON.parse(await readFile(statePath, "utf8"));
-  const allowedKeys = [
-    "workItem",
-    "slug",
-    "repo",
-    "sandbox",
-    "branch",
-    "baseBranch",
-    "baseSha",
-    "repoDir",
-    "hostWorktree",
-    "exportedCommit",
-    "syncedCommit",
-  ];
-  return Object.fromEntries(
-    allowedKeys
-      .filter(key => Object.hasOwn(parsed, key))
-      .map(key => [key, parsed[key]]),
-  );
-}
-
 const server = new McpServer({
   name: "sbx-host",
   version: "1.0.0",
@@ -113,12 +86,12 @@ server.registerTool(
   "inspect",
   {
     description:
-      "Read sbx-work transfer metadata for one work item. Does not execute Docker or modify files.",
+      "Read allowlisted transfer metadata and report whether the registered Docker Sandbox still exists.",
     inputSchema: { workItem: workItemSchema },
   },
   async ({ workItem }) => {
     try {
-      return result(JSON.stringify(await inspectState(workItem), null, 2));
+      return result(await runHelper(["inspect", String(workItem)]));
     } catch (error) {
       return result(formatError(error), true);
     }

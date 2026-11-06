@@ -89,6 +89,7 @@ cat >"$fake_sbx" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"$fake_sbx_log"
 if [[ "\${1:-}" == "ls" ]]; then
+  [[ -n "\${FAKE_SBX_LIST:-}" ]] && printf '%s\n' "\$FAKE_SBX_LIST"
   exit 0
 fi
 if [[ "\${FAKE_SBX_FAIL_EXEC:-false}" == "true" && "\${1:-}" == "exec" ]]; then
@@ -106,6 +107,21 @@ if [[ "$(jq -r '.slug' "${state_root}/125.json")" == "fresh-seed" ]] &&
   pass=$((pass + 1))
 else
   printf 'FAIL: replace stale unexported metadata\n'
+  fail=$((fail + 1))
+fi
+
+inspect_present_output="$(
+  FAKE_SBX_LIST=wi-125-vm \
+    SBX_WORK_REPOS_ROOT="$repos_root" \
+    SBX_WORK_STATE_ROOT="$state_root" \
+    SBX_WORK_SBX_BIN="$fake_sbx" \
+    bash "$script" inspect 125
+)"
+if [[ "$(jq -r '.sandboxStatus' <<<"$inspect_present_output")" == "present" ]]; then
+  printf 'PASS: inspect present sandbox\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: inspect present sandbox\n'
   fail=$((fail + 1))
 fi
 
@@ -128,6 +144,43 @@ if [[ -f "${state_root}/126.json" ]]; then
   pass=$((pass + 1))
 else
   printf 'FAIL: stale exported metadata remains\n'
+  fail=$((fail + 1))
+fi
+
+inspect_exported_output="$(
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+    SBX_WORK_STATE_ROOT="$state_root" \
+    SBX_WORK_SBX_BIN="$fake_sbx" \
+    bash "$script" inspect 126
+)"
+if [[ "$(jq -r '.sandboxStatus' <<<"$inspect_exported_output")" == "missing-exported" ]]; then
+  printf 'PASS: inspect missing exported sandbox\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: inspect missing exported sandbox\n'
+  fail=$((fail + 1))
+fi
+
+cat >"${state_root}/128.json" <<'EOF'
+{
+  "workItem": "128",
+  "repo": "example-repo",
+  "sandbox": "wi-128-vm",
+  "privateValue": "must-not-leak"
+}
+EOF
+inspect_stale_output="$(
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+    SBX_WORK_STATE_ROOT="$state_root" \
+    SBX_WORK_SBX_BIN="$fake_sbx" \
+    bash "$script" inspect 128
+)"
+if [[ "$(jq -r '.sandboxStatus' <<<"$inspect_stale_output")" == "missing-unexported" ]] &&
+  [[ "$inspect_stale_output" != *"must-not-leak"* ]]; then
+  printf 'PASS: inspect missing unexported sandbox\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: inspect missing unexported sandbox\n'
   fail=$((fail + 1))
 fi
 

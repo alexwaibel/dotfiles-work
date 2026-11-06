@@ -14,11 +14,13 @@ dry_run=false
 usage() {
   cat <<'EOF'
 Usage:
+  sbx-work inspect WORK_ITEM
   sbx-work [--dry-run] seed WORK_ITEM SLUG [REPO]
   sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
 
 Commands:
+  inspect   Report transfer metadata and whether its sandbox still exists.
   seed      Work around broken WSL clone mode by seeding a mountless sandbox
             from a verified Git bundle, creating the task branch, and restoring
             detected Azure Artifacts dependencies before agent startup.
@@ -107,6 +109,42 @@ clear_stale_state() {
 
   note "removing stale unexported metadata for absent sandbox $sandbox"
   rm -f "$file"
+}
+
+inspect_work() {
+  local id="$1"
+  validate_work_item "$id"
+  local file sandbox sandbox_status
+  file="$(state_file "$id")"
+  [[ -f "$file" ]] || die "metadata not found for work item $id"
+  sandbox="$(jq -er '.sandbox' "$file")"
+
+  if sandbox_exists "$(find_sbx)" "$sandbox"; then
+    sandbox_status="present"
+  elif jq -e \
+    'has("hostWorktree") or has("exportedCommit") or has("syncedCommit")' \
+    "$file" >/dev/null; then
+    sandbox_status="missing-exported"
+  else
+    sandbox_status="missing-unexported"
+  fi
+
+  jq --arg sandboxStatus "$sandbox_status" \
+    '({
+      workItem,
+      slug,
+      repo,
+      sandbox,
+      branch,
+      baseBranch,
+      baseSha,
+      repoDir,
+      hostWorktree,
+      exportedCommit,
+      syncedCommit
+    } | with_entries(select(.value != null))) + {
+      sandboxStatus: $sandboxStatus
+    }' "$file"
 }
 
 validate_work_item() {
@@ -576,6 +614,11 @@ command_name="${1:-}"
 shift
 
 case "$command_name" in
+  inspect)
+    (($# == 1)) || die "inspect requires WORK_ITEM"
+    acquire_lock
+    inspect_work "$1"
+    ;;
   seed)
     (($# >= 2 && $# <= 3)) || die "seed requires WORK_ITEM SLUG [REPO]"
     acquire_lock

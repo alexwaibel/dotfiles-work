@@ -34,14 +34,15 @@ while that short-lived package-read PAT exists.
 1. Fetch the complete ADO item and assess fitness.
 2. Resolve unclear reproduction or design questions on the host.
 3. Call `sbx-host.inspect` for the work-item ID:
-   - If metadata exists, verify the repository, branch, base, and VM path, then
-     resume that sandbox. Do not seed again.
-   - If metadata is absent, identify the repository and slug, then call
+   - If `sandboxStatus` is `present`, verify the repository, branch, base, and
+     VM path, then resume that sandbox.
+   - If metadata is absent or `sandboxStatus` is `missing-unexported`, identify
+     the repository and slug, then call
      `sbx-host.seed`. Seed automatically restores dependencies when the
      canonical repository declares a supported package manager and configures
      an Azure Artifacts registry.
-   - Seed automatically replaces stale, unexported metadata when its sandbox no
-     longer exists. It preserves metadata that references exported host work.
+   - If `sandboxStatus` is `missing-exported`, stop and preserve the metadata
+     and host worktree for review.
 4. Ask the user to attach from Windows Terminal:
 
    ```powershell

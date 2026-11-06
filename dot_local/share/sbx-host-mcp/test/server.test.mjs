@@ -31,6 +31,10 @@ if [[ "$1" == "sync" && "$2" == "999" ]]; then
   printf 'x%.0s' {1..40000} >&2
   exit 1
 fi
+if [[ "$1" == "inspect" ]]; then
+  printf '{"workItem":"123","sandbox":"wi-123-vm","sandboxStatus":"present"}\n'
+  exit 0
+fi
 printf 'helper: %s\\n' "$*"
 `,
     { mode: 0o700 },
@@ -120,6 +124,7 @@ test("inspect returns only allowlisted metadata", async t => {
   const response = await readMessage(process);
   const text = response.result.content[0].text;
   assert.match(text, /wi-123-vm/);
+  assert.match(text, /"sandboxStatus":"present"/);
   assert.doesNotMatch(text, /must-not-leak/);
 });
 
