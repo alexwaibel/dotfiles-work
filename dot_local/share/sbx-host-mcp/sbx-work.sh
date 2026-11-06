@@ -474,7 +474,7 @@ seed() {
     return "$exit_code"
   }
 
-  note "creating mountless sandbox $sandbox"
+  note "creating clone-mode sandbox $sandbox"
   seed_started=true
   seed_step run sbx_call "$sbx" create \
     --clone \
@@ -547,7 +547,6 @@ EOF
       --arg baseBranch "$base_branch" \
       --arg baseSha "$base_sha" \
       --arg repoDir "$repo_dir" \
-      --arg transferMode "clone" \
       '{
         workItem: $id,
         slug: $slug,
@@ -556,8 +555,7 @@ EOF
         branch: $branch,
         baseBranch: $baseBranch,
         baseSha: $baseSha,
-        repoDir: $repoDir,
-        transferMode: $transferMode
+        repoDir: $repoDir
       }'
   fi
   seed_started=false
@@ -701,7 +699,7 @@ dispatch_task() {
 export_work() {
   local id="$1"
   validate_work_item "$id"
-  local sbx sandbox repo branch base_branch base_sha repo_dir slug repo_path transfer_mode
+  local sbx sandbox repo branch base_branch base_sha repo_dir slug repo_path
   sbx="$(find_sbx)"
   sandbox="$(state_value "$id" '.sandbox')"
   repo="$(state_value "$id" '.repo')"
@@ -710,7 +708,6 @@ export_work() {
   base_sha="$(state_value "$id" '.baseSha')"
   repo_dir="$(state_value "$id" '.repoDir')"
   slug="$(state_value "$id" '.slug')"
-  transfer_mode="$(state_value "$id" '.transferMode // "bundle"')"
   repo_path="$(canonical_repo "$repo")"
 
   local vm_status
@@ -722,19 +719,9 @@ export_work() {
   [[ "$vm_head" != "$base_sha" ]] || die "sandbox branch has no commits to export"
 
   local export_ref="refs/remotes/sbx-work/${id}"
-  local host_bundle=""
-  if [[ "$transfer_mode" == "clone" ]]; then
-    local sandbox_remote="sandbox-${sandbox}"
-    run windows_git "$repo_path" fetch \
-      "$sandbox_remote" "+$branch:$export_ref"
-  else
-    local vm_bundle="/tmp/sbx-work-${id}.bundle"
-    host_bundle="${state_root}/${id}-export.bundle"
-    sbx_exec_shell "$sbx" "$sandbox" \
-      "cd $(printf '%q' "$repo_dir") && git bundle create $(printf '%q' "$vm_bundle") $(printf '%q' "$branch") ^$(printf '%q' "$base_sha") && git bundle verify $(printf '%q' "$vm_bundle")"
-    run sbx_call "$sbx" cp "$sandbox:$vm_bundle" "$(win_path "$host_bundle")"
-    run git -C "$repo_path" bundle verify "$host_bundle"
-  fi
+  local sandbox_remote="sandbox-${sandbox}"
+  run windows_git "$repo_path" fetch \
+    "$sandbox_remote" "+$branch:$export_ref"
   run git -C "$repo_path" fetch origin
 
   local worktree="${repos_root}/worktrees/${repo}/${id}-${slug}"
@@ -751,9 +738,6 @@ export_work() {
   [[ "$(git -C "$worktree" branch --show-current)" == "$branch" ]] ||
     die "host worktree is not on the expected branch"
 
-  if [[ "$transfer_mode" != "clone" ]]; then
-    run git -C "$worktree" fetch "$host_bundle" "+$branch:$export_ref"
-  fi
   [[ "$(git -C "$worktree" rev-parse "$export_ref")" == "$vm_head" ]] ||
     die "imported branch does not match sandbox HEAD"
   local original_base original_patch_id
@@ -792,7 +776,6 @@ export_work() {
   )"
   [[ "$rebased_patch_id" == "$original_patch_id" ]] ||
     die "rebased export changed the VM patch"
-  [[ -z "$host_bundle" ]] || run rm -f "$host_bundle"
 
   if ! $dry_run; then
     update_state "$id" \

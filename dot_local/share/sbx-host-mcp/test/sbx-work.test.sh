@@ -353,8 +353,7 @@ cat >"${state_root}/130.json" <<EOF
   "branch": "$export_branch",
   "baseBranch": "master",
   "baseSha": "$export_base",
-  "repoDir": "/home/agent/workspace/export-repo",
-  "transferMode": "clone"
+  "repoDir": "/home/agent/workspace/export-repo"
 }
 EOF
 fake_export_sbx="${tmp_dir}/fake-export-sbx"
