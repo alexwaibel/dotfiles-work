@@ -22,6 +22,7 @@ const helper = resolve(
 const maxBuffer = 8 * 1024 * 1024;
 const maxResult = 32 * 1024;
 const timeout = 15 * 60 * 1000;
+const seedJobs = new Map();
 
 const workItemSchema = z.number().int().positive();
 const slugSchema = z
@@ -77,6 +78,60 @@ async function runHelper(args) {
   );
 }
 
+function seedStatus(job) {
+  return {
+    workItem: job.workItem,
+    sandbox: `wi-${job.workItem}-vm`,
+    repoDir: `/home/agent/workspace/${job.repo}`,
+    seedStatus: job.status,
+    startedAt: job.startedAt,
+  };
+}
+
+function startSeed(workItem, slug, repo) {
+  const existing = seedJobs.get(workItem);
+  if (existing?.status === "running") return existing;
+
+  const job = {
+    workItem,
+    repo,
+    status: "running",
+    startedAt: new Date().toISOString(),
+    promise: undefined,
+    error: undefined,
+  };
+  job.promise = runHelper(["seed", String(workItem), slug, repo])
+    .then(() => {
+      job.status = "succeeded";
+    })
+    .catch(error => {
+      job.status = "failed";
+      job.error = formatError(error);
+    });
+  seedJobs.set(workItem, job);
+  return job;
+}
+
+async function waitForSeed(workItem, waitSeconds) {
+  const job = seedJobs.get(workItem);
+  if (!job) return undefined;
+  if (job.status === "running" && waitSeconds > 0) {
+    await Promise.race([
+      job.promise,
+      new Promise(resolve => setTimeout(resolve, waitSeconds * 1000)),
+    ]);
+  }
+  if (job.status === "failed") {
+    seedJobs.delete(workItem);
+    return result(job.error || "Sandbox seed failed", true);
+  }
+  if (job.status === "running") {
+    return result(JSON.stringify(seedStatus(job), null, 2));
+  }
+  seedJobs.delete(workItem);
+  return undefined;
+}
+
 const server = new McpServer({
   name: "sbx-host",
   version: "1.0.0",
@@ -87,10 +142,15 @@ server.registerTool(
   {
     description:
       "Read allowlisted transfer metadata and report whether the registered Docker Sandbox still exists.",
-    inputSchema: { workItem: workItemSchema },
+    inputSchema: {
+      workItem: workItemSchema,
+      waitSeconds: z.number().int().min(0).max(120).default(0),
+    },
   },
-  async ({ workItem }) => {
+  async ({ workItem, waitSeconds }) => {
     try {
+      const seedResult = await waitForSeed(workItem, waitSeconds);
+      if (seedResult) return seedResult;
       return result(await runHelper(["inspect", String(workItem)]));
     } catch (error) {
       return result(formatError(error), true);
@@ -112,9 +172,7 @@ server.registerTool(
   async ({ workItem, slug, repo }) => {
     try {
       await validateCanonicalRepo(repo);
-      return result(
-        await runHelper(["seed", String(workItem), slug, repo]),
-      );
+      return result(JSON.stringify(seedStatus(startSeed(workItem, slug, repo)), null, 2));
     } catch (error) {
       return result(formatError(error), true);
     }

@@ -35,6 +35,9 @@ if [[ "$1" == "inspect" ]]; then
   printf '{"workItem":"123","sandbox":"wi-123-vm","sandboxStatus":"present"}\n'
   exit 0
 fi
+if [[ "$1" == "seed" && "$3" == "slow-seed" ]]; then
+  sleep 1
+fi
 printf 'helper: %s\\n' "$*"
 `,
     { mode: 0o700 },
@@ -128,11 +131,12 @@ test("inspect returns only allowlisted metadata", async t => {
   assert.doesNotMatch(text, /must-not-leak/);
 });
 
-test("seed validates inputs and invokes helper without a shell", async t => {
+test("seed returns immediately and inspect waits for completion", async t => {
   const paths = await fixture();
   const process = startServer(paths);
   t.after(() => process.kill());
   await initialize(process);
+  const started = Date.now();
   send(process, {
     jsonrpc: "2.0",
     id: 2,
@@ -141,18 +145,32 @@ test("seed validates inputs and invokes helper without a shell", async t => {
       name: "seed",
       arguments: {
         workItem: 123,
-        slug: "valid-slug",
+        slug: "slow-seed",
         repo: "example-repo",
       },
     },
   });
   const response = await readMessage(process);
   assert.equal(response.result.isError, undefined);
-  assert.match(response.result.content[0].text, /helper: seed 123 valid-slug/);
+  assert.ok(Date.now() - started < 750);
+  assert.match(response.result.content[0].text, /"seedStatus": "running"/);
 
   send(process, {
     jsonrpc: "2.0",
     id: 3,
+    method: "tools/call",
+    params: {
+      name: "inspect",
+      arguments: { workItem: 123, waitSeconds: 2 },
+    },
+  });
+  const completed = await readMessage(process);
+  assert.equal(completed.result.isError, undefined);
+  assert.match(completed.result.content[0].text, /"sandboxStatus":"present"/);
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 4,
     method: "tools/call",
     params: {
       name: "seed",

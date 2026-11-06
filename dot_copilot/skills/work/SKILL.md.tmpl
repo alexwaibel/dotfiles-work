@@ -105,9 +105,16 @@ The goal is to maximize the chance of completing autonomously. Upfront discussio
     - **Style**: does the code match the repo's conventions?
 
 16. Push branch and open a DRAFT PR:
-    a. Check for PR conventions (`.azuredevops/pull_request_template.md`, `.github/pull_request_template.md`, or PR instructions in `AGENTS.md`/`CLAUDE.md`).
-    b. Create a draft PR via `az repos pr create --work-items <ID>` with a descriptive title (no `AB#` prefix).
-    c. Draft only, link work items, no `AB#` prefix in the title.
+    a. Check for repository PR skills and conventions
+       (`.agents/skills/create-pr`, `.azuredevops/pull_request_template.md`,
+       `.github/pull_request_template.md`, or PR instructions in
+       `AGENTS.md`/`CLAUDE.md`) and follow them.
+    b. Compose the reviewer-facing description from the work item, final diff,
+       and verified results. Apply the global External Artifact Hygiene policy;
+       repository conventions are additive.
+    c. Create a draft PR via `az repos pr create --work-items <ID>` with a
+       descriptive title (no `AB#` prefix).
+    d. Draft only, link work items, no `AB#` prefix in the title.
 
 17. **Clean up worktree**:
     ```bash

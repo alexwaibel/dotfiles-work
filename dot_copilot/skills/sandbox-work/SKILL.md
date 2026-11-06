@@ -26,8 +26,9 @@ The VM owns:
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
 Azure Artifacts credentials may be passed only to the constrained
-package-manager process used by `sbx-host.seed`. Lifecycle scripts are disabled
-while that short-lived package-read PAT exists.
+package-manager process used by `sbx-host.seed`. The PAT is acquired through
+Windows AzureAuth so Conditional Access uses the authenticated Windows session.
+Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 
 ## Procedure
 
@@ -41,6 +42,9 @@ while that short-lived package-read PAT exists.
      `sbx-host.seed`. Seed automatically restores dependencies when the
      canonical repository declares a supported package manager and configures
      an Azure Artifacts registry.
+     Seed returns immediately; call `sbx-host.inspect` with `waitSeconds: 60`
+     until it reports `sandboxStatus: present`. Do not use shell sleeps or start
+     another seed while `seedStatus` is `running`.
    - If `sandboxStatus` is `missing-exported`, stop and preserve the metadata
      and host worktree for review.
 4. Ask the user to attach from Windows Terminal:
@@ -74,13 +78,20 @@ while that short-lived package-read PAT exists.
    - commit without push or PR
 10. Keep browser reproduction and live network inspection on the host.
 11. When the VM has a clean committed change:
-
-   - Call `sbx-host.export`.
-   - Call `sbx-host.sync` after host review/rebase.
-
-12. After `sync`, rerun the repository-defined validation inside the VM.
-13. Review the host worktree diff against the work item. Push only the expected
-    `users/alwaibel/agent/<id>-<slug>` branch and create a draft PR.
+    - Call `sbx-host.export`.
+    - Confirm export reports that the rebased commit preserved the VM patch.
+12. Review the host worktree diff against the work item. If the rebase was
+    clean, the patch was preserved, and no host edits are needed:
+    - Push only the expected `users/alwaibel/agent/<id>-<slug>` branch.
+    - Follow any repository PR skill, template, and instructions.
+    - Compose the PR from the work item, final diff, and verified outcomes; do
+      not copy the VM handoff or result text into the PR.
+    - Apply the global External Artifact Hygiene policy before creating the
+      draft PR. Repository conventions are additive.
+    - Let CI validate the final rebased commit.
+13. Call `sbx-host.sync` only when conflicts, host review, or requested
+    follow-up require more VM work. Prefer a fresh VM Copilot session for that
+    validation rather than returning to the implementation context.
 14. Stop the VM for PR follow-up using Docker directly:
 
    ```bash
@@ -125,5 +136,6 @@ while that short-lived package-read PAT exists.
 
 The `sbx-host` MCP server is the constrained host bridge. It exposes only
 `inspect`, `seed`, `export`, and `sync`; modifying tools require explicit
-approval. Lifecycle, policy, diagnostics, and removal remain native `sbx`
-operations run by the user from Windows Terminal.
+approval. `sync` is exceptional follow-up, not part of the normal publish path.
+Lifecycle, policy, diagnostics, and removal remain native `sbx` operations run
+by the user from Windows Terminal.

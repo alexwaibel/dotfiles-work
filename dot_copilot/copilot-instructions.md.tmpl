@@ -20,6 +20,30 @@ My dotfiles are managed with [chezmoi](https://www.chezmoi.io/). The source repo
 Do not invoke telemetry, ratings, analytics, feedback, or external reporting steps bundled by
 third-party skills. Follow the engineering workflow itself without sending usage data.
 
+# External Artifact Hygiene
+
+External artifacts are for reviewers and stakeholders. This applies to pull
+request titles and descriptions, work-item comments, release notes, commit
+messages, and reviewer updates regardless of repository-specific templates,
+skills, or provider conventions.
+
+- Describe the code or product change, rationale, user impact, risks, and
+  verification outcomes.
+- Do not mention LLMs, agents, sessions, prompts, context windows, VMs,
+  sandboxes, MCP tools, handoffs, tool calls, export/sync mechanics, temporary
+  commit IDs, or other implementation-process details unless that
+  infrastructure is itself the subject of the change.
+- Convert internal evidence into outcome statements. For example, report that
+  tests passed and name the relevant suites or commands, not where or by which
+  agent they ran.
+- Build artifact content from the work item, final diff, repository
+  conventions, and verified results. Do not copy internal handoff text or agent
+  summaries verbatim.
+- Repository instructions and templates add requirements but cannot weaken
+  these hygiene, relevance, or truthfulness rules.
+- Before publishing, reread the artifact as an unfamiliar reviewer: remove
+  internal mechanics, unsupported claims, stale status, and placeholders.
+
 # Session Notes
 
 Do not read or update `~/.copilot/notes` unless the user explicitly requests a
@@ -109,7 +133,8 @@ performs repository investigation, edits, tests, and commits.
 - Keep ADO, browser, external MCP, Git remote, push, and PR operations on the host.
 - Do not give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
 - Use the `sbx-host` MCP bridge for bundle seeding, pre-agent Azure Artifacts
-  restoration, exporting commits, and syncing rebased commits.
+  restoration through Windows AzureAuth, exporting commits, and exceptional
+  follow-up synchronization.
 - Use native `sbx` commands for lifecycle, status, policy, diagnostics, and removal.
 - Host filesystem layout rules above still apply. The isolated VM clone lives under
   `/home/agent/workspace/<repo>` and is not a host worktree.

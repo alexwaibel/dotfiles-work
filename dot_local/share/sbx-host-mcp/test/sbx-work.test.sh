@@ -88,6 +88,9 @@ fake_sbx_log="${tmp_dir}/fake-sbx.log"
 cat >"$fake_sbx" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >>"$fake_sbx_log"
+if [[ "\${1:-}" == "exec" ]]; then
+  printf 'forwarded:%s:%s\n' "\${WSLENV:-}" "\${#ADO_NPM_TOKEN}" >>"$fake_sbx_log"
+fi
 if [[ "\${1:-}" == "ls" ]]; then
   [[ -n "\${FAKE_SBX_LIST:-}" ]] && printf '%s\n' "\$FAKE_SBX_LIST"
   exit 0
@@ -227,12 +230,126 @@ private_seed_output="$(
 if [[ "$private_seed_output" == *"restoring private dependencies before agent startup"* ]] &&
   [[ "$private_seed_output" == *"ADO_NPM_TOKEN=<redacted>"* ]] &&
   [[ "$private_seed_output" == *"yarn install --immutable"* ]] &&
+  [[ "$private_seed_output" == *"vsassets.io"* ]] &&
   [[ "$private_seed_output" == *"YARN_ENABLE_SCRIPTS=false"* ]] &&
   [[ ! -e "${state_root}/124.json" ]]; then
   printf 'PASS: private dependency seed preflight\n'
   pass=$((pass + 1))
 else
   printf 'FAIL: private dependency seed preflight\n'
+  fail=$((fail + 1))
+fi
+
+fake_powershell="${tmp_dir}/powershell.exe"
+fake_powershell_log="${tmp_dir}/powershell.log"
+cat >"$fake_powershell" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$fake_powershell_log"
+printf 'package-read-token\\r\\n'
+EOF
+chmod u+x "$fake_powershell"
+: >"$fake_sbx_log"
+git -C "$repo" remote set-url origin "$remote"
+SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_sbx" \
+  SBX_WORK_POWERSHELL_BIN="$fake_powershell" \
+  SBX_WORK_ADO_ORGANIZATION=example \
+  bash "$script" seed 129 windows-auth example-repo >/dev/null
+if [[ -f "${state_root}/129.json" ]] &&
+  grep -q 'azureauth ado pat' "$fake_powershell_log" &&
+  grep -q -- '-e ADO_NPM_TOKEN' "$fake_sbx_log" &&
+  grep -Eq '^forwarded:.*ADO_NPM_TOKEN:[1-9][0-9]*$' "$fake_sbx_log" &&
+  grep -q 'node_modules/.yarn-state.yml' "$fake_sbx_log" &&
+  ! grep -q 'package-read-token' "$fake_sbx_log"; then
+  printf 'PASS: Windows auth token stays out of VM command arguments\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: Windows auth token stays out of VM command arguments\n'
+  fail=$((fail + 1))
+fi
+
+export_repo="${repos_root}/export-repo"
+export_remote="${tmp_dir}/export-remote.git"
+export_vm="${tmp_dir}/export-vm"
+export_bundle="${tmp_dir}/export.bundle"
+git init -q --bare "$export_remote"
+git -C "$repos_root" init -q -b master export-repo
+git -C "$export_repo" config user.name "Test User"
+git -C "$export_repo" config user.email "test@example.com"
+printf 'base\n' >"${export_repo}/base.txt"
+git -C "$export_repo" add base.txt
+git -C "$export_repo" commit -qm "Base"
+git -C "$export_repo" remote add origin "$export_remote"
+git -C "$export_repo" push -qu origin master
+git --git-dir="$export_remote" symbolic-ref HEAD refs/heads/master
+git -C "$export_repo" remote set-head origin --auto >/dev/null
+export_base="$(git -C "$export_repo" rev-parse HEAD)"
+
+git clone -q "$export_remote" "$export_vm"
+git -C "$export_vm" config user.name "VM Agent"
+git -C "$export_vm" config user.email "agent@example.com"
+export_branch="users/alwaibel/agent/130-export-topology"
+git -C "$export_vm" checkout -qb "$export_branch" "$export_base"
+printf 'agent\n' >"${export_vm}/agent.txt"
+git -C "$export_vm" add agent.txt
+git -C "$export_vm" commit -qm "Agent change"
+export_vm_commit="$(git -C "$export_vm" rev-parse HEAD)"
+git -C "$export_vm" bundle create "$export_bundle" "$export_branch" "^$export_base"
+
+printf 'advanced\n' >"${export_repo}/advanced.txt"
+git -C "$export_repo" add advanced.txt
+git -C "$export_repo" commit -qm "Advance master"
+git -C "$export_repo" push -qu origin master
+export_origin_head="$(git -C "$export_repo" rev-parse HEAD)"
+
+cat >"${state_root}/130.json" <<EOF
+{
+  "workItem": "130",
+  "slug": "export-topology",
+  "repo": "export-repo",
+  "sandbox": "wi-130-vm",
+  "branch": "$export_branch",
+  "baseBranch": "master",
+  "baseSha": "$export_base",
+  "repoDir": "/home/agent/workspace/export-repo"
+}
+EOF
+fake_export_sbx="${tmp_dir}/fake-export-sbx"
+cat >"$fake_export_sbx" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "exec" ]]; then
+  case "$*" in
+    *"rev-parse HEAD"*)
+      printf '%s\n' "$FAKE_VM_COMMIT"
+      ;;
+  esac
+  exit 0
+fi
+if [[ "$1" == "cp" ]]; then
+  cp "$FAKE_VM_BUNDLE" "$(wslpath -u "$3")"
+  exit 0
+fi
+exit 0
+EOF
+chmod u+x "$fake_export_sbx"
+FAKE_VM_COMMIT="$export_vm_commit" \
+  FAKE_VM_BUNDLE="$export_bundle" \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_export_sbx" \
+  bash "$script" export 130 >/dev/null
+export_worktree="${repos_root}/worktrees/export-repo/130-export-topology"
+exported_head="$(git -C "$export_worktree" rev-parse HEAD)"
+if git -C "$export_worktree" merge-base --is-ancestor \
+  "$export_origin_head" "$exported_head" &&
+  [[ -f "${export_worktree}/agent.txt" ]] &&
+  [[ "$(jq -r '.patchPreserved' "${state_root}/130.json")" == "true" ]] &&
+  [[ "$exported_head" != "$export_vm_commit" ]]; then
+  printf 'PASS: export rebases VM commit after advanced base\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: export rebases VM commit after advanced base\n'
   fail=$((fail + 1))
 fi
 

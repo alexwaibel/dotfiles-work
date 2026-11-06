@@ -141,7 +141,8 @@ inspect_work() {
       repoDir,
       hostWorktree,
       exportedCommit,
-      syncedCommit
+      syncedCommit,
+      patchPreserved
     } | with_entries(select(.value != null))) + {
       sandboxStatus: $sandboxStatus
     }' "$file"
@@ -298,6 +299,12 @@ detect_install_command() {
 
 ado_organization() {
   local repo_path="$1"
+  if [[ -n "${SBX_WORK_ADO_ORGANIZATION:-}" ]]; then
+    [[ "$SBX_WORK_ADO_ORGANIZATION" =~ ^[A-Za-z0-9._-]+$ ]] ||
+      die "invalid SBX_WORK_ADO_ORGANIZATION"
+    printf '%s\n' "$SBX_WORK_ADO_ORGANIZATION"
+    return
+  fi
   local remote
   remote="$(git -C "$repo_path" remote get-url origin)"
   if [[ "$remote" =~ ^https://([^.]+)\.visualstudio\.com/ ]]; then
@@ -309,6 +316,20 @@ ado_organization() {
     return
   fi
   die "cannot derive Azure DevOps organization from origin: $remote"
+}
+
+windows_ado_pat() {
+  local organization="$1"
+  local id="$2"
+  local powershell_bin="${SBX_WORK_POWERSHELL_BIN:-powershell.exe}"
+  [[ "$organization" =~ ^[A-Za-z0-9._-]+$ ]] ||
+    die "invalid Azure DevOps organization: $organization"
+  command -v "$powershell_bin" >/dev/null 2>&1 ||
+    die "powershell.exe is required for Windows-host Azure authentication"
+
+  "$powershell_bin" -NoProfile -Command \
+    "azureauth ado pat --organization '$organization' --display-name 'DockerSandbox-wi-$id' --scope vso.packaging --output token --prompt-hint 'DockerSandbox-wi-$id' --timeout 30" |
+    tr -d '\r'
 }
 
 seed() {
@@ -408,6 +429,8 @@ EOF
      fi'
 
   if ((${#install_command[@]} > 0)); then
+    seed_step run "$sbx" policy allow network --sandbox "$sandbox" \
+      '**.vsassets.io'
     note "restoring private dependencies before agent startup"
     seed_step restore_private_dependencies \
       "$id" "$sbx" "$sandbox" "$repo_dir" "$repo_path" \
@@ -483,16 +506,12 @@ restore_private_dependencies() {
   fi
 
   local token
-  token="$(
-    azureauth ado pat \
-      --organization "$organization" \
-      --display-name "DockerSandbox-wi-${id}" \
-      --scope vso.packaging \
-      --output token \
-      --prompt-hint "DockerSandbox-wi-${id}" \
-      --timeout 30
-  )"
-  ADO_NPM_TOKEN="$token" "$sbx" exec \
+  token="$(windows_ado_pat "$organization" "$id")"
+  [[ -n "$token" ]] || die "Windows Azure authentication returned an empty token"
+  [[ "$token" != *$'\n'* ]] ||
+    die "Windows Azure authentication returned unexpected multi-line output"
+  local forwarded_wslenv="${WSLENV:+${WSLENV}:}ADO_NPM_TOKEN"
+  WSLENV="$forwarded_wslenv" ADO_NPM_TOKEN="$token" "$sbx" exec \
     -e ADO_NPM_TOKEN \
     -e YARN_ENABLE_SCRIPTS=false \
     -e npm_config_ignore_scripts=true \
@@ -500,6 +519,21 @@ restore_private_dependencies() {
     "$sandbox" -- \
     bash -lc "$PACKAGE_RUNNER" bash "$repo_dir" "${install_command[@]}"
   unset token ADO_NPM_TOKEN
+
+  case "$executable" in
+    yarn)
+      sbx_exec_shell "$sbx" "$sandbox" \
+        "cd $(printf '%q' "$repo_dir") && { test -f node_modules/.yarn-state.yml || test -f .pnp.cjs || test -f .yarn/install-state.gz; }"
+      ;;
+    npm)
+      sbx_exec_shell "$sbx" "$sandbox" \
+        "cd $(printf '%q' "$repo_dir") && test -d node_modules"
+      ;;
+    pnpm)
+      sbx_exec_shell "$sbx" "$sandbox" \
+        "cd $(printf '%q' "$repo_dir") && test -d node_modules/.pnpm"
+      ;;
+  esac
 }
 
 export_work() {
@@ -537,25 +571,42 @@ export_work() {
     if git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch"; then
       run git -C "$repo_path" worktree add "$worktree" "$branch"
     else
-      run git -C "$repo_path" worktree add "$worktree" -b "$branch" "origin/$base_branch"
+      run git -C "$repo_path" worktree add "$worktree" -b "$branch" "$base_sha"
     fi
   fi
 
   local export_ref="refs/remotes/sbx-work/${id}"
   run git -C "$worktree" fetch "$host_bundle" "$branch:$export_ref"
+  local original_patch_id
+  original_patch_id="$(
+    git -C "$worktree" diff "$base_sha" "$export_ref" |
+      git patch-id --stable |
+      awk '{print $1}'
+  )"
+  [[ -n "$original_patch_id" ]] || die "exported branch has no patch to verify"
   run git -C "$worktree" merge --ff-only "$export_ref"
   run git -C "$worktree" rebase "origin/$base_branch"
   local exported_commit
   exported_commit="$(git -C "$worktree" rev-parse HEAD)"
+  local rebased_patch_id
+  rebased_patch_id="$(
+    git -C "$worktree" diff "origin/$base_branch" "$exported_commit" |
+      git patch-id --stable |
+      awk '{print $1}'
+  )"
+  [[ "$rebased_patch_id" == "$original_patch_id" ]] ||
+    die "rebased export changed the VM patch"
   run rm -f "$host_bundle"
 
   if ! $dry_run; then
     update_state "$id" \
-      '.hostWorktree = $worktree | .exportedCommit = $commit' \
+      '.hostWorktree = $worktree |
+       .exportedCommit = $commit |
+       .patchPreserved = true' \
       --arg worktree "$worktree" \
       --arg commit "$exported_commit"
   fi
-  note "exported to $worktree at $exported_commit"
+  note "exported to $worktree at $exported_commit; VM patch preserved"
 }
 
 sync_work() {

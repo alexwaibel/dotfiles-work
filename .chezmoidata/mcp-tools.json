@@ -387,7 +387,7 @@
       "highRisk": {
         "export": "Creates or updates a host worktree and rebases an agent branch.",
         "seed": "Creates a Docker Sandbox VM, task branch, and detected private dependency restore.",
-        "sync": "Resets the VM clone to the rebased host branch."
+        "sync": "Resets the VM clone to a reviewed host branch for exceptional follow-up work."
       }
     },
     "host-attachments": {
