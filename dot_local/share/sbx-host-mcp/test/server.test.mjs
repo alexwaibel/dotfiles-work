@@ -38,7 +38,11 @@ fi
 if [[ "$1" == "dispatch" ]]; then
   task="$SBX_WORK_STATE_ROOT/tasks/$3.json"
   log="$SBX_WORK_STATE_ROOT/tasks/$3.log"
+  prompt="$SBX_WORK_STATE_ROOT/tasks/$3.prompt"
   tmp="$task.tmp"
+  if grep -q '^WAIT_QUEUED' "$prompt"; then
+    sleep 5
+  fi
   jq '.status = "running" | .runnerPid = $pid' --argjson pid "$$" "$task" >"$tmp"
   mv "$tmp" "$task"
   printf 'agent completed task\n' >"$log"
@@ -174,6 +178,7 @@ test("seed returns immediately and inspect waits for completion", async t => {
   assert.equal(response.result.isError, undefined);
   assert.ok(Date.now() - started < 750);
   assert.match(response.result.content[0].text, /"seedStatus": "running"/);
+  assert.doesNotMatch(response.result.content[0].text, /repoDir/);
 
   send(process, {
     jsonrpc: "2.0",
@@ -273,4 +278,71 @@ test("dispatch persists status and logs", async t => {
   });
   const logs = await readMessage(process);
   assert.match(logs.result.content[0].text, /agent completed task/);
+});
+
+test("cancel stops a task before queued dispatch starts", async t => {
+  const paths = await fixture();
+  const process = startServer(paths);
+  t.after(() => process.kill());
+  await initialize(process);
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: {
+      name: "dispatch",
+      arguments: { workItem: 123, prompt: "WAIT_QUEUED\nDo not run." },
+    },
+  });
+  const dispatched = await readMessage(process);
+  const task = JSON.parse(dispatched.result.content[0].text);
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "cancel", arguments: { taskId: task.taskId } },
+  });
+  const canceled = await readMessage(process);
+  assert.equal(JSON.parse(canceled.result.content[0].text).status, "canceled");
+
+  await new Promise(resolve => setTimeout(resolve, 200));
+  send(process, {
+    jsonrpc: "2.0",
+    id: 4,
+    method: "tools/call",
+    params: {
+      name: "task_status",
+      arguments: { taskId: task.taskId },
+    },
+  });
+  const status = await readMessage(process);
+  assert.equal(JSON.parse(status.result.content[0].text).status, "canceled");
+});
+
+test("queued task with dead launcher becomes failed", async t => {
+  const paths = await fixture();
+  const tasks = join(paths.state, "tasks");
+  await mkdir(tasks, { recursive: true });
+  const taskId = "task-22222222-2222-2222-2222-222222222222";
+  await writeFile(
+    join(tasks, `${taskId}.json`),
+    JSON.stringify({ taskId, workItem: 123, status: "queued" }),
+  );
+  await writeFile(join(tasks, `${taskId}.pid`), "2147483647\n");
+
+  const process = startServer(paths);
+  t.after(() => process.kill());
+  await initialize(process);
+  send(process, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "task_status", arguments: { taskId } },
+  });
+  const response = await readMessage(process);
+  const task = JSON.parse(response.result.content[0].text);
+  assert.equal(task.status, "failed");
+  assert.match(task.error, /exited before starting/);
 });

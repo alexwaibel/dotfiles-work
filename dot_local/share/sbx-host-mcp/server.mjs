@@ -115,6 +115,26 @@ function processIsAlive(pid) {
 async function readTask(taskId) {
   const path = join(tasksRoot, `${taskId}.json`);
   const task = JSON.parse(await readFile(path, "utf8"));
+  if (task.status === "queued") {
+    let launcherPid;
+    try {
+      launcherPid = Number.parseInt(
+        await readFile(join(tasksRoot, `${taskId}.pid`), "utf8"),
+        10,
+      );
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    if (Number.isInteger(launcherPid)) {
+      task.runnerPid = launcherPid;
+      if (!processIsAlive(launcherPid)) {
+        task.status = "failed";
+        task.error = "task runner exited before starting";
+        task.completedAt = new Date().toISOString();
+        await writeJsonAtomic(path, task);
+      }
+    }
+  }
   if (task.status === "running" && !processIsAlive(task.runnerPid)) {
     task.status = "failed";
     task.error = "task runner exited without recording completion";
@@ -177,6 +197,9 @@ async function dispatchTask(workItem, prompt) {
       },
     },
   );
+  await writeFile(join(tasksRoot, `${taskId}.pid`), `${child.pid}\n`, {
+    mode: 0o600,
+  });
   child.unref();
   return task;
 }
@@ -199,7 +222,6 @@ function seedStatus(job) {
   return {
     workItem: job.workItem,
     sandbox: `wi-${job.workItem}-vm`,
-    repoDir: `/home/agent/workspace/${job.repo}`,
     seedStatus: job.status,
     startedAt: job.startedAt,
   };
@@ -361,10 +383,26 @@ server.registerTool(
       if (!["queued", "running"].includes(task.status)) {
         throw new Error(`Task is not active: ${task.status}`);
       }
-      if (processIsAlive(task.runnerPid)) {
-        process.kill(-task.runnerPid, "SIGTERM");
+      let runnerPid = task.runnerPid;
+      if (!Number.isInteger(runnerPid)) {
+        try {
+          runnerPid = Number.parseInt(
+            await readFile(join(tasksRoot, `${taskId}.pid`), "utf8"),
+            10,
+          );
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error;
+        }
+      }
+      if (processIsAlive(runnerPid)) {
+        try {
+          process.kill(-runnerPid, "SIGTERM");
+        } catch (error) {
+          if (error?.code !== "ESRCH") throw error;
+        }
       }
       task.status = "canceled";
+      task.cancelRequested = true;
       task.completedAt = new Date().toISOString();
       await writeJsonAtomic(join(tasksRoot, `${taskId}.json`), task);
       return result(JSON.stringify(task, null, 2));

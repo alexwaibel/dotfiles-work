@@ -9,11 +9,13 @@ fail=0
 expect_success() {
   local description="$1"
   shift
-  if "$@" >/dev/null 2>&1; then
+  local output
+  if output="$("$@" 2>&1)"; then
     printf 'PASS: %s\n' "$description"
     pass=$((pass + 1))
   else
     printf 'FAIL: %s\n' "$description"
+    printf '%s\n' "$output"
     fail=$((fail + 1))
   fi
 }
@@ -421,6 +423,73 @@ else
   printf 'FAIL: export rebases VM commit after advanced base\n'
   fail=$((fail + 1))
 fi
+
+export_iteration_vm="${tmp_dir}/export-iteration-vm"
+git clone -q --branch "$export_branch" "$export_worktree" "$export_iteration_vm"
+git -C "$export_iteration_vm" config user.name "VM Agent"
+git -C "$export_iteration_vm" config user.email "agent@example.com"
+printf 'simplified agent\n' >"${export_iteration_vm}/agent.txt"
+git -C "$export_iteration_vm" commit -qam "Simplify agent change"
+export_vm_commit="$(git -C "$export_iteration_vm" rev-parse HEAD)"
+git -C "$export_iteration_vm" bundle create "$export_bundle" "$export_branch" "^$export_base"
+printf 'advanced again\n' >"${export_repo}/advanced-again.txt"
+git -C "$export_repo" add advanced-again.txt
+git -C "$export_repo" commit -qm "Advance master again"
+git -C "$export_repo" push -qu origin master
+
+run_export_fixture() {
+  FAKE_VM_COMMIT="$export_vm_commit" \
+    FAKE_VM_BUNDLE="$export_bundle" \
+    FAKE_WINDOWS_GIT_LOG="$fake_windows_git_log" \
+    SBX_WORK_REPOS_ROOT="$repos_root" \
+    SBX_WORK_STATE_ROOT="$state_root" \
+    SBX_WORK_SBX_BIN="$fake_export_sbx" \
+    SBX_WORK_WINDOWS_GIT_BIN="$fake_windows_git" \
+    bash "$script" export 130
+}
+
+expect_success "export follow-up excludes upstream commits from stale seed base" \
+  run_export_fixture
+exported_head="$(git -C "$export_worktree" rev-parse HEAD)"
+expect_success "retry verifies already-rebased export without fast-forward" \
+  run_export_fixture
+if [[ "$(jq -r '.exportedCommit' "${state_root}/130.json")" == "$exported_head" ]] &&
+  [[ "$(git -C "$export_worktree" rev-parse HEAD)" == "$exported_head" ]] &&
+  [[ "$(cat "${export_worktree}/agent.txt")" == "simplified agent" ]]; then
+  printf 'PASS: retry preserves branch and records verified commit\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: retry preserves branch and records verified commit\n'
+  fail=$((fail + 1))
+fi
+
+printf 'unreviewed host change\n' >"${export_worktree}/agent.txt"
+expect_failure "export rejects dirty host worktree" run_export_fixture
+git -C "$export_worktree" commit -qam "Unreviewed host change"
+unreviewed_head="$(git -C "$export_worktree" rev-parse HEAD)"
+expect_failure "retry rejects changed host patch" run_export_fixture
+if [[ "$(git -C "$export_worktree" rev-parse HEAD)" == "$unreviewed_head" ]] &&
+  [[ "$(jq -r '.exportedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
+  printf 'PASS: rejected retry preserves host work and transfer metadata\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: rejected retry preserves host work and transfer metadata\n'
+  fail=$((fail + 1))
+fi
+git -C "$export_worktree" revert --no-edit "$unreviewed_head" >/dev/null
+reverted_head="$(git -C "$export_worktree" rev-parse HEAD)"
+expect_failure "retry rejects equivalent patch with unrecorded history" \
+  run_export_fixture
+if [[ "$(git -C "$export_worktree" rev-parse HEAD)" == "$reverted_head" ]] &&
+  [[ "$(jq -r '.exportedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
+  printf 'PASS: rejected equivalent history preserves recorded export\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: rejected equivalent history preserves recorded export\n'
+  fail=$((fail + 1))
+fi
+git -C "$export_worktree" reset --hard "$exported_head" >/dev/null
+expect_success "retry accepts the exact recorded export" run_export_fixture
 
 FAKE_VM_COMMIT="$exported_head" \
   FAKE_VM_BUNDLE="$export_bundle" \

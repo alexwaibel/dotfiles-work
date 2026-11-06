@@ -662,9 +662,17 @@ dispatch_task() {
   sandbox="$(state_value "$id" '.sandbox')"
   repo_dir="$(state_value "$id" '.repoDir')"
   update_task "$task_id" \
-    '.status = "running" | .runnerPid = $pid | .startedAt = $started' \
+    'if .cancelRequested or .status == "canceled" then
+       .status = "canceled"
+     else
+       .status = "running" | .runnerPid = $pid | .startedAt = $started
+     end' \
     --argjson pid "$$" \
     --arg started "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [[ "$(jq -r '.status' "$metadata_file")" == "canceled" ]]; then
+    rm -f "$prompt_file"
+    return 130
+  fi
 
   set +e
   sbx_call "$sbx" exec -i -w "$repo_dir" "$sandbox" -- \
@@ -676,9 +684,13 @@ dispatch_task() {
   status="failed"
   [[ "$exit_code" -eq 0 ]] && status="completed"
   update_task "$task_id" \
-    '.status = $status |
-     .exitCode = $exitCode |
-     .completedAt = $completed' \
+    'if .status == "canceled" or .cancelRequested then
+       .status = "canceled" | .completedAt = $completed
+     else
+       .status = $status |
+       .exitCode = $exitCode |
+       .completedAt = $completed
+     end' \
     --arg status "$status" \
     --argjson exitCode "$exit_code" \
     --arg completed "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -714,7 +726,7 @@ export_work() {
   if [[ "$transfer_mode" == "clone" ]]; then
     local sandbox_remote="sandbox-${sandbox}"
     run windows_git "$repo_path" fetch \
-      "$sandbox_remote" "$branch:$export_ref"
+      "$sandbox_remote" "+$branch:$export_ref"
   else
     local vm_bundle="/tmp/sbx-work-${id}.bundle"
     host_bundle="${state_root}/${id}-export.bundle"
@@ -734,17 +746,41 @@ export_work() {
     fi
   fi
 
+  [[ -z "$(git -C "$worktree" status --porcelain)" ]] ||
+    die "host worktree has uncommitted changes"
+  [[ "$(git -C "$worktree" branch --show-current)" == "$branch" ]] ||
+    die "host worktree is not on the expected branch"
+
   if [[ "$transfer_mode" != "clone" ]]; then
-    run git -C "$worktree" fetch "$host_bundle" "$branch:$export_ref"
+    run git -C "$worktree" fetch "$host_bundle" "+$branch:$export_ref"
   fi
-  local original_patch_id
+  [[ "$(git -C "$worktree" rev-parse "$export_ref")" == "$vm_head" ]] ||
+    die "imported branch does not match sandbox HEAD"
+  local original_base original_patch_id
+  original_base="$(git -C "$worktree" merge-base "origin/$base_branch" "$export_ref")"
   original_patch_id="$(
-    git -C "$worktree" diff "$base_sha" "$export_ref" |
+    git -C "$worktree" diff "$original_base" "$export_ref" |
       git patch-id --stable |
       awk '{print $1}'
   )"
   [[ -n "$original_patch_id" ]] || die "exported branch has no patch to verify"
-  run git -C "$worktree" merge --ff-only "$export_ref"
+  if git -C "$worktree" merge-base --is-ancestor HEAD "$export_ref"; then
+    run git -C "$worktree" merge --ff-only "$export_ref"
+  else
+    local previous_exported host_base host_patch_id
+    previous_exported="$(read_state "$id" | jq -r '.exportedCommit // empty')"
+    [[ -n "$previous_exported" && "$(git -C "$worktree" rev-parse HEAD)" == "$previous_exported" ]] ||
+      die "host branch changed since the last recorded export; preserve both branches for review"
+    host_base="$(git -C "$worktree" merge-base "origin/$base_branch" HEAD)"
+    host_patch_id="$(
+      git -C "$worktree" diff "$host_base" HEAD |
+        git patch-id --stable |
+        awk '{print $1}'
+    )"
+    [[ "$host_patch_id" == "$original_patch_id" ]] ||
+      die "host branch diverged from the VM patch; preserve both branches for review"
+    note "host branch already contains the equivalent rebased VM patch"
+  fi
   run git -C "$worktree" rebase "origin/$base_branch"
   local exported_commit
   exported_commit="$(git -C "$worktree" rev-parse HEAD)"
