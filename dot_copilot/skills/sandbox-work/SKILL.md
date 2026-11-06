@@ -47,20 +47,20 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
      another seed while `seedStatus` is `running`.
    - If `sandboxStatus` is `missing-exported`, stop and preserve the metadata
      and host worktree for review.
-4. Ask the user to attach from Windows Terminal:
-
-   ```powershell
-   sbx run --name wi-<work-item>-vm
-   ```
-
-5. After Copilot starts, change to the VM repository path returned by
-   `sbx-host.inspect` or `sbx-host.seed`.
-6. Have the VM agent read the repository's `AGENTS.md`, `README.md`, and
-   package metadata to determine setup and validation commands.
-   Seed creates user-local Corepack shims when Corepack is available, so
-   repo-pinned Yarn and pnpm commands work without system installation.
-7. Run repository-required rebuild, postinstall, code generation, or setup
-   inside the VM after the seed restore, when the PAT is gone.
+4. Build a bounded implementation prompt containing the work-item requirements,
+   VM repository path and branch, repository-instruction requirement, validation
+   expectations, commit trailers, and the prohibition on push/PR/external
+   credentials. Do not include host secrets or unrelated session context.
+5. Call `sbx-host.dispatch`. Poll `sbx-host.task_status` and read
+   `sbx-host.task_logs` until it completes. Do not use shell sleeps or ask the
+   user to proxy the prompt/results through an interactive terminal.
+6. If the task returns a question or bounded blocker, resolve it on the host and
+   dispatch a fresh follow-up task in the same VM. Each dispatch is a fresh
+   Copilot process with the repository state and dependencies preserved.
+7. The VM task must read the repository's `AGENTS.md`, `README.md`, and package
+   metadata; run required post-restore setup; implement; validate; and commit
+   without push or PR. Seed creates user-local package-manager shims and
+   configures repository-local Git identity.
 8. If Balanced networking blocks a required package or API host, inspect the
    Docker policy log and add only the required sandbox-scoped rule:
 
@@ -107,9 +107,11 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 ## Recovery
 
 - Transfer metadata is stored under `~/.local/state/sbx-work/`.
+- Dispatched task metadata and logs are stored under
+  `~/.local/state/sbx-work/tasks/`.
 - A reboot or daemon restart should not require recreating the sandbox.
-- Interactive attachment always remains user-run from Windows Terminal; the
-  host MCP bridge cannot proxy the VM's TTY.
+- Interactive `sbx run --name wi-<work-item>-vm` remains a manual diagnostic
+  fallback, not the normal implementation path.
 - Seed is atomic: an incomplete new sandbox is removed and no metadata is
   retained. Retry seed after correcting the reported failure.
 - If Copilot reports expired or unauthorized credentials, ask the user to run:
@@ -135,7 +137,6 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 ## Repository behavior
 
 The `sbx-host` MCP server is the constrained host bridge. It exposes only
-`inspect`, `seed`, `export`, and `sync`; modifying tools require explicit
-approval. `sync` is exceptional follow-up, not part of the normal publish path.
-Lifecycle, policy, diagnostics, and removal remain native `sbx` operations run
-by the user from Windows Terminal.
+seed/inspection, bounded Copilot dispatch/status/logs/cancel, export, and
+exceptional sync. It does not expose arbitrary host commands or paths.
+Lifecycle, policy, diagnostics, and removal remain native `sbx` operations.

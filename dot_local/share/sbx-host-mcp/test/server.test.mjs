@@ -32,7 +32,18 @@ if [[ "$1" == "sync" && "$2" == "999" ]]; then
   exit 1
 fi
 if [[ "$1" == "inspect" ]]; then
-  printf '{"workItem":"123","sandbox":"wi-123-vm","sandboxStatus":"present"}\n'
+  printf '{"workItem":"123","sandbox":"wi-123-vm","repoDir":"/home/agent/workspace/example-repo","sandboxStatus":"present"}\n'
+  exit 0
+fi
+if [[ "$1" == "dispatch" ]]; then
+  task="$SBX_WORK_STATE_ROOT/tasks/$3.json"
+  log="$SBX_WORK_STATE_ROOT/tasks/$3.log"
+  tmp="$task.tmp"
+  jq '.status = "running" | .runnerPid = $pid' --argjson pid "$$" "$task" >"$tmp"
+  mv "$tmp" "$task"
+  printf 'agent completed task\n' >"$log"
+  jq '.status = "completed" | .exitCode = 0' "$task" >"$tmp"
+  mv "$tmp" "$task"
   exit 0
 fi
 if [[ "$1" == "seed" && "$3" == "slow-seed" ]]; then
@@ -109,7 +120,16 @@ test("lists the constrained tool surface", async t => {
   const response = await readMessage(process);
   assert.deepEqual(
     response.result.tools.map(tool => tool.name).sort(),
-    ["export", "inspect", "seed", "sync"],
+    [
+      "cancel",
+      "dispatch",
+      "export",
+      "inspect",
+      "seed",
+      "sync",
+      "task_logs",
+      "task_status",
+    ],
   );
 });
 
@@ -202,4 +222,55 @@ test("failed helper output is bounded", async t => {
   assert.equal(response.result.isError, true);
   assert.match(text, /output truncated/);
   assert.ok(text.length < 34 * 1024);
+});
+
+test("dispatch persists status and logs", async t => {
+  const paths = await fixture();
+  const process = startServer(paths);
+  t.after(() => process.kill());
+  await initialize(process);
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: {
+      name: "dispatch",
+      arguments: { workItem: 123, prompt: "Implement the bounded task." },
+    },
+  });
+  const dispatched = await readMessage(process);
+  assert.equal(dispatched.result.isError, undefined);
+  const task = JSON.parse(dispatched.result.content[0].text);
+  assert.match(task.taskId, /^task-[a-f0-9-]{36}$/);
+
+  let status;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    send(process, {
+      jsonrpc: "2.0",
+      id: 3 + attempt,
+      method: "tools/call",
+      params: {
+        name: "task_status",
+        arguments: { taskId: task.taskId },
+      },
+    });
+    const response = await readMessage(process);
+    status = JSON.parse(response.result.content[0].text);
+    if (status.status === "completed") break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  assert.equal(status.status, "completed");
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 30,
+    method: "tools/call",
+    params: {
+      name: "task_logs",
+      arguments: { taskId: task.taskId },
+    },
+  });
+  const logs = await readMessage(process);
+  assert.match(logs.result.content[0].text, /agent completed task/);
 });

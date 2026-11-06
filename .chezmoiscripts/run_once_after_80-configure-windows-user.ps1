@@ -46,6 +46,14 @@ if ($pubKey) {
 git -C "$env:USERPROFILE\.local\share\chezmoi" remote set-url origin `
     git@github.com:alexwaibel/dotfiles-work.git
 
+if (Get-Command sbx -ErrorAction SilentlyContinue) {
+    sbx settings set ssh.agentForwardingEnabled false
+    sbx settings set browser.enabled false
+    sbx settings set sandbox.fuse false
+    sbx settings set telemetry.disabled true
+    sbx daemon restart
+}
+
 $wtSettings = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 if (Test-Path $wtSettings) {
     $gruvboxScheme = @{

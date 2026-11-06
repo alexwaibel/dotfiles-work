@@ -129,14 +129,17 @@ sbx policy init balanced
 
 The `copilot` service secret is required by Docker's Copilot kit. The token stays in the
 Windows credential store and is injected by Docker's proxy rather than copied into the VM.
+The Windows user-configuration script disables sandbox SSH-agent forwarding, host-browser
+opening, FUSE/SYS_ADMIN, and Docker telemetry, then restarts the daemon. Those managed
+settings are intentionally not repeated as manual setup commands here.
 
 The WSL `sbx-host` MCP bridge fills only the current WSL integration gaps. Invoke the
 `sandbox-work` skill from a Copilot session; it uses schema-constrained host tools for seed,
-export, and exceptional follow-up sync. Seed restores detected Azure Artifacts dependencies
-before the agent starts.
+noninteractive Copilot dispatch, export, and exceptional follow-up sync. Seed restores
+detected Azure Artifacts dependencies before the agent starts.
 Azure authentication runs through Windows PowerShell so Conditional Access uses the signed-in
 Windows session rather than launching a browser inside WSL.
-Attach to the resulting VM from Windows Terminal:
+Interactive attachment remains available for diagnostics:
 
 ```powershell
 sbx run --name wi-<work-item>-vm

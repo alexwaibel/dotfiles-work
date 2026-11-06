@@ -9,6 +9,7 @@ readonly DEFAULT_STATE_ROOT="${XDG_STATE_HOME:-${HOME}/.local/state}/sbx-work"
 
 repos_root="${SBX_WORK_REPOS_ROOT:-$DEFAULT_REPOS_ROOT}"
 state_root="${SBX_WORK_STATE_ROOT:-$DEFAULT_STATE_ROOT}"
+tasks_root="${SBX_WORK_TASKS_ROOT:-${state_root}/tasks}"
 dry_run=false
 
 usage() {
@@ -16,6 +17,7 @@ usage() {
 Usage:
   sbx-work inspect WORK_ITEM
   sbx-work [--dry-run] seed WORK_ITEM SLUG [REPO]
+  sbx-work dispatch WORK_ITEM TASK_ID
   sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
 
@@ -24,6 +26,7 @@ Commands:
   seed      Work around broken WSL clone mode by seeding a mountless sandbox
             from a verified Git bundle, creating the task branch, and restoring
             detected Azure Artifacts dependencies before agent startup.
+  dispatch  Run one noninteractive Copilot task in the existing sandbox.
   export    Bundle committed VM work into a standard host worktree and rebase.
   sync      Transfer the rebased host branch back into the VM.
 
@@ -83,10 +86,18 @@ find_sbx() {
   printf '%s\n' "$windows_sbx"
 }
 
+sbx_call() {
+  local sbx="$1"
+  shift
+  local command="$1"
+  shift
+  "$sbx" "$command" --no-input "$@"
+}
+
 sandbox_exists() {
   local sbx="$1"
   local sandbox="$2"
-  "$sbx" ls -q | tr -d '\r' | grep -Fxq "$sandbox"
+  sbx_call "$sbx" ls -q | tr -d '\r' | grep -Fxq "$sandbox"
 }
 
 clear_stale_state() {
@@ -211,6 +222,35 @@ state_file() {
   printf '%s/%s.json\n' "$state_root" "$1"
 }
 
+validate_task_id() {
+  [[ "$1" =~ ^task-[a-f0-9-]{36}$ ]] ||
+    die "invalid task ID"
+}
+
+task_file() {
+  printf '%s/%s.json\n' "$tasks_root" "$1"
+}
+
+task_log_file() {
+  printf '%s/%s.log\n' "$tasks_root" "$1"
+}
+
+task_prompt_file() {
+  printf '%s/%s.prompt\n' "$tasks_root" "$1"
+}
+
+update_task() {
+  local task_id="$1"
+  local filter="$2"
+  shift 2
+  local file tmp
+  file="$(task_file "$task_id")"
+  [[ -f "$file" ]] || die "task metadata not found: $task_id"
+  tmp="${file}.tmp"
+  jq "$@" "$filter" "$file" >"$tmp"
+  mv "$tmp" "$file"
+}
+
 read_state() {
   local file
   file="$(state_file "$1")"
@@ -255,7 +295,7 @@ sbx_exec_shell() {
   local sbx="$1"
   local sandbox="$2"
   local command="$3"
-  run "$sbx" exec "$sandbox" -- bash -lc "$command"
+  run sbx_call "$sbx" exec "$sandbox" -- bash -lc "$command"
 }
 
 uses_azure_artifacts() {
@@ -340,13 +380,17 @@ seed() {
   validate_work_item "$id"
   validate_slug "$slug"
 
-  local repo_path sbx base_branch sandbox branch repo_dir
+  local repo_path sbx base_branch sandbox branch repo_dir git_name git_email
   repo_path="$(canonical_repo "$repo")"
   sbx="$(find_sbx)"
   base_branch="$(discover_base_branch "$repo_path")"
   sandbox="wi-${id}-vm"
   branch="users/alwaibel/agent/${id}-${slug}"
   repo_dir="/home/agent/workspace/${repo}"
+  git_name="$(git -C "$repo_path" config user.name)"
+  git_email="$(git -C "$repo_path" config user.email)"
+  [[ -n "$git_name" && -n "$git_email" ]] ||
+    die "canonical repository must resolve git user.name and user.email"
 
   if ! $dry_run; then
     clear_stale_state "$id" "$sbx" "$sandbox"
@@ -384,7 +428,7 @@ seed() {
   cleanup_incomplete_seed() {
     if $seed_started && ! $dry_run; then
       note "cleaning incomplete sandbox $sandbox"
-      "$sbx" rm --force "$sandbox" >/dev/null 2>&1 || true
+      sbx_call "$sbx" rm --force "$sandbox" >/dev/null 2>&1 || true
       rm -f "$(state_file "$id")"
     fi
     rm -f "$seed_bundle"
@@ -399,11 +443,15 @@ seed() {
 
   note "creating mountless sandbox $sandbox"
   seed_started=true
-  seed_step run "$sbx" create --name "$sandbox" copilot
-  seed_step run "$sbx" run -d --name "$sandbox"
-  seed_step run "$sbx" cp "$(win_path "$seed_bundle")" "$sandbox:/tmp/${repo}.bundle"
+  seed_step run sbx_call "$sbx" create \
+    --name "$sandbox" \
+    --static-mcp none \
+    --skills off \
+    copilot
+  seed_step run sbx_call "$sbx" run -d --name "$sandbox"
+  seed_step run sbx_call "$sbx" cp "$(win_path "$seed_bundle")" "$sandbox:/tmp/${repo}.bundle"
   seed_step sbx_exec_shell "$sbx" "$sandbox" \
-    "git clone --branch $(printf '%q' "$base_branch") /tmp/$(printf '%q' "$repo").bundle $(printf '%q' "$repo_dir") && git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch")"
+    "git clone --branch $(printf '%q' "$base_branch") /tmp/$(printf '%q' "$repo").bundle $(printf '%q' "$repo_dir") && git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch") && git -C $(printf '%q' "$repo_dir") config user.name $(printf '%q' "$git_name") && git -C $(printf '%q' "$repo_dir") config user.email $(printf '%q' "$git_email")"
   seed_step sbx_exec_shell "$sbx" "$sandbox" \
     'if command -v corepack >/dev/null 2>&1; then
        mkdir -p "$HOME/.local/bin"
@@ -429,7 +477,7 @@ EOF
      fi'
 
   if ((${#install_command[@]} > 0)); then
-    seed_step run "$sbx" policy allow network --sandbox "$sandbox" \
+    seed_step run sbx_call "$sbx" policy allow network --sandbox "$sandbox" \
       '**.vsassets.io'
     note "restoring private dependencies before agent startup"
     seed_step restore_private_dependencies \
@@ -494,7 +542,7 @@ restore_private_dependencies() {
 
   if $dry_run; then
     printf '+ ADO_NPM_TOKEN=<redacted> '
-    quote_command "$sbx" exec \
+    quote_command "$sbx" exec --no-input \
       -e ADO_NPM_TOKEN \
       -e YARN_ENABLE_SCRIPTS=false \
       -e npm_config_ignore_scripts=true \
@@ -511,7 +559,7 @@ restore_private_dependencies() {
   [[ "$token" != *$'\n'* ]] ||
     die "Windows Azure authentication returned unexpected multi-line output"
   local forwarded_wslenv="${WSLENV:+${WSLENV}:}ADO_NPM_TOKEN"
-  WSLENV="$forwarded_wslenv" ADO_NPM_TOKEN="$token" "$sbx" exec \
+  WSLENV="$forwarded_wslenv" ADO_NPM_TOKEN="$token" "$sbx" exec --no-input \
     -e ADO_NPM_TOKEN \
     -e YARN_ENABLE_SCRIPTS=false \
     -e npm_config_ignore_scripts=true \
@@ -536,6 +584,56 @@ restore_private_dependencies() {
   esac
 }
 
+dispatch_task() {
+  local id="$1"
+  local task_id="$2"
+  validate_work_item "$id"
+  validate_task_id "$task_id"
+
+  local prompt_file log_file metadata_file
+  prompt_file="$(task_prompt_file "$task_id")"
+  log_file="$(task_log_file "$task_id")"
+  metadata_file="$(task_file "$task_id")"
+  [[ -f "$prompt_file" && -f "$metadata_file" ]] ||
+    die "task files are incomplete: $task_id"
+
+  mkdir -p "$tasks_root"
+  exec 8>"${state_root}/task-${id}.lock"
+  if ! flock -n 8; then
+    update_task "$task_id" \
+      '.status = "failed" | .error = "another task is active for this work item"'
+    die "another task is active for work item $id"
+  fi
+
+  local sbx sandbox repo_dir exit_code status
+  sbx="$(find_sbx)"
+  sandbox="$(state_value "$id" '.sandbox')"
+  repo_dir="$(state_value "$id" '.repoDir')"
+  update_task "$task_id" \
+    '.status = "running" | .runnerPid = $pid | .startedAt = $started' \
+    --argjson pid "$$" \
+    --arg started "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  set +e
+  sbx_call "$sbx" exec -i -w "$repo_dir" "$sandbox" -- \
+    bash -lc 'prompt="$(cat)"; export PATH="$HOME/.local/bin:$PATH"; exec copilot --yolo -p "$prompt"' \
+    <"$prompt_file" >"$log_file" 2>&1
+  exit_code=$?
+  set -e
+
+  status="failed"
+  [[ "$exit_code" -eq 0 ]] && status="completed"
+  update_task "$task_id" \
+    '.status = $status |
+     .exitCode = $exitCode |
+     .completedAt = $completed' \
+    --arg status "$status" \
+    --argjson exitCode "$exit_code" \
+    --arg completed "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  rm -f "$prompt_file"
+  return "$exit_code"
+}
+
 export_work() {
   local id="$1"
   validate_work_item "$id"
@@ -551,18 +649,18 @@ export_work() {
   repo_path="$(canonical_repo "$repo")"
 
   local vm_status
-  vm_status="$("$sbx" exec "$sandbox" -- git -C "$repo_dir" status --porcelain)"
+  vm_status="$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" status --porcelain)"
   [[ -z "$vm_status" ]] || die "sandbox repository has uncommitted changes"
 
   local vm_head
-  vm_head="$("$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)"
+  vm_head="$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)"
   [[ "$vm_head" != "$base_sha" ]] || die "sandbox branch has no commits to export"
 
   local vm_bundle="/tmp/sbx-work-${id}.bundle"
   local host_bundle="${state_root}/${id}-export.bundle"
   sbx_exec_shell "$sbx" "$sandbox" \
     "cd $(printf '%q' "$repo_dir") && git bundle create $(printf '%q' "$vm_bundle") $(printf '%q' "$branch") ^$(printf '%q' "$base_sha") && git bundle verify $(printf '%q' "$vm_bundle")"
-  run "$sbx" cp "$sandbox:$vm_bundle" "$(win_path "$host_bundle")"
+  run sbx_call "$sbx" cp "$sandbox:$vm_bundle" "$(win_path "$host_bundle")"
   run git -C "$repo_path" bundle verify "$host_bundle"
   run git -C "$repo_path" fetch origin
 
@@ -622,13 +720,13 @@ sync_work() {
 
   [[ -z "$(git -C "$worktree" status --porcelain)" ]] ||
     die "host worktree has uncommitted changes"
-  [[ -z "$("$sbx" exec "$sandbox" -- git -C "$repo_dir" status --porcelain)" ]] ||
+  [[ -z "$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" status --porcelain)" ]] ||
     die "sandbox repository has uncommitted changes"
 
   local bundle="${state_root}/${id}-sync.bundle"
   run git -C "$worktree" bundle create "$bundle" "$branch" "^$base_sha"
   run git -C "$worktree" bundle verify "$bundle"
-  run "$sbx" cp "$(win_path "$bundle")" "$sandbox:/tmp/sbx-work-${id}-sync.bundle"
+  run sbx_call "$sbx" cp "$(win_path "$bundle")" "$sandbox:/tmp/sbx-work-${id}-sync.bundle"
   sbx_exec_shell "$sbx" "$sandbox" \
     "cd $(printf '%q' "$repo_dir") && git fetch /tmp/sbx-work-${id}-sync.bundle $(printf '%q' "$branch"):refs/remotes/host/rebased && git reset --hard refs/remotes/host/rebased"
   run rm -f "$bundle"
@@ -674,6 +772,10 @@ case "$command_name" in
     (($# >= 2 && $# <= 3)) || die "seed requires WORK_ITEM SLUG [REPO]"
     acquire_lock
     seed "$@"
+    ;;
+  dispatch)
+    (($# == 2)) || die "dispatch requires WORK_ITEM TASK_ID"
+    dispatch_task "$1" "$2"
     ;;
   export)
     (($# == 1)) || die "export requires WORK_ITEM"

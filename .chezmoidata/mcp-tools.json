@@ -376,13 +376,21 @@
     },
     "sbx-host": {
       "all": [
+        "cancel",
+        "dispatch",
         "export",
         "inspect",
         "seed",
-        "sync"
+        "sync",
+        "task_logs",
+        "task_status"
       ],
       "safe": [
-        "inspect"
+        "cancel",
+        "dispatch",
+        "inspect",
+        "task_logs",
+        "task_status"
       ],
       "highRisk": {
         "export": "Creates or updates a host worktree and rebases an agent branch.",

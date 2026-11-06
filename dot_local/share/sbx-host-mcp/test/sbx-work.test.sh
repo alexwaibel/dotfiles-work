@@ -63,7 +63,7 @@ dry_run_output="$(
     SBX_WORK_SBX_BIN=/bin/true \
   bash "$script" --dry-run seed 123 valid-slug example-repo
 )"
-if [[ "$dry_run_output" == *"create --name wi-123-vm copilot"* ]] &&
+if [[ "$dry_run_output" == *"create --name wi-123-vm --static-mcp none --skills off copilot"* ]] &&
   [[ "$dry_run_output" == *"wi-123-vm:/tmp/example-repo.bundle"* ]] &&
   [[ "$dry_run_output" == *"users/alwaibel/agent/123-valid-slug"* ]] &&
   [[ "$dry_run_output" != *"ADO_NPM_TOKEN"* ]] &&
@@ -87,9 +87,14 @@ fake_sbx="${tmp_dir}/fake-sbx"
 fake_sbx_log="${tmp_dir}/fake-sbx.log"
 cat >"$fake_sbx" <<EOF
 #!/usr/bin/env bash
+command="\$1"
+shift
+[[ "\${1:-}" == "--no-input" ]] && shift
+set -- "\$command" "\$@"
 printf '%s\n' "\$*" >>"$fake_sbx_log"
 if [[ "\${1:-}" == "exec" ]]; then
   printf 'forwarded:%s:%s\n' "\${WSLENV:-}" "\${#ADO_NPM_TOKEN}" >>"$fake_sbx_log"
+  [[ "\$*" == *"copilot --yolo"* ]] && printf 'agent completed task\n'
 fi
 if [[ "\${1:-}" == "ls" ]]; then
   [[ -n "\${FAKE_SBX_LIST:-}" ]] && printf '%s\n' "\$FAKE_SBX_LIST"
@@ -105,7 +110,7 @@ SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_SBX_BIN="$fake_sbx" \
   bash "$script" seed 125 fresh-seed example-repo >/dev/null
 if [[ "$(jq -r '.slug' "${state_root}/125.json")" == "fresh-seed" ]] &&
-  grep -q '^create --name wi-125-vm copilot$' "$fake_sbx_log"; then
+  grep -q '^create --name wi-125-vm --static-mcp none --skills off copilot$' "$fake_sbx_log"; then
   printf 'PASS: replace stale unexported metadata\n'
   pass=$((pass + 1))
 else
@@ -269,6 +274,39 @@ else
   fail=$((fail + 1))
 fi
 
+mkdir -p "${state_root}/tasks"
+cat >"${state_root}/131.json" <<'EOF'
+{
+  "workItem": "131",
+  "repo": "example-repo",
+  "sandbox": "wi-131-vm",
+  "repoDir": "/home/agent/workspace/example-repo"
+}
+EOF
+task_id="task-11111111-1111-1111-1111-111111111111"
+cat >"${state_root}/tasks/${task_id}.json" <<EOF
+{
+  "taskId": "$task_id",
+  "workItem": 131,
+  "status": "queued"
+}
+EOF
+printf 'Implement the bounded task.' >"${state_root}/tasks/${task_id}.prompt"
+: >"${state_root}/tasks/${task_id}.log"
+SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_sbx" \
+  bash "$script" dispatch 131 "$task_id"
+if [[ "$(jq -r '.status' "${state_root}/tasks/${task_id}.json")" == "completed" ]] &&
+  grep -q 'agent completed task' "${state_root}/tasks/${task_id}.log" &&
+  [[ ! -e "${state_root}/tasks/${task_id}.prompt" ]]; then
+  printf 'PASS: dispatch records task status and logs\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL: dispatch records task status and logs\n'
+  fail=$((fail + 1))
+fi
+
 export_repo="${repos_root}/export-repo"
 export_remote="${tmp_dir}/export-remote.git"
 export_vm="${tmp_dir}/export-vm"
@@ -318,6 +356,10 @@ EOF
 fake_export_sbx="${tmp_dir}/fake-export-sbx"
 cat >"$fake_export_sbx" <<'EOF'
 #!/usr/bin/env bash
+command="$1"
+shift
+[[ "${1:-}" == "--no-input" ]] && shift
+set -- "$command" "$@"
 if [[ "$1" == "exec" ]]; then
   case "$*" in
     *"rev-parse HEAD"*)
