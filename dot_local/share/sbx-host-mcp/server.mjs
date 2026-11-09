@@ -1,26 +1,16 @@
 #!/usr/bin/env node
 
-import { execFile, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import {
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  realpath,
-  rename,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { createHelperClient } from "./lib/helper-client.mjs";
+import { createSeedManager } from "./lib/seed-manager.mjs";
+import { createTaskManager } from "./lib/task-manager.mjs";
 
-const execFileAsync = promisify(execFile);
 const home = homedir();
 const reposRoot = resolve(
   process.env.SBX_HOST_REPOS_ROOT || join(home, "repos"),
@@ -34,10 +24,6 @@ const packageRoot = dirname(fileURLToPath(import.meta.url));
 const helper = resolve(
   process.env.SBX_HOST_HELPER || join(packageRoot, "sbx-work.sh"),
 );
-const maxBuffer = 8 * 1024 * 1024;
-const maxResult = 32 * 1024;
-const timeout = 15 * 60 * 1000;
-const seedJobs = new Map();
 
 const workItemSchema = z.number().int().positive();
 const slugSchema = z
@@ -53,21 +39,6 @@ function result(text, isError = false) {
   };
 }
 
-function formatError(error) {
-  if (error && typeof error === "object") {
-    const stderr = typeof error.stderr === "string" ? error.stderr.trim() : "";
-    const stdout = typeof error.stdout === "string" ? error.stdout.trim() : "";
-    const message = error instanceof Error ? error.message : String(error);
-    return truncateOutput([message, stderr, stdout].filter(Boolean).join("\n"));
-  }
-  return String(error);
-}
-
-function truncateOutput(text) {
-  if (text.length <= maxResult) return text;
-  return `[output truncated to final ${maxResult} bytes]\n${text.slice(-maxResult)}`;
-}
-
 async function validateCanonicalRepo(repo) {
   const expected = resolve(reposRoot, repo);
   const resolved = await realpath(expected);
@@ -78,198 +49,20 @@ async function validateCanonicalRepo(repo) {
   if (gitDir !== join(resolved, ".git")) {
     throw new Error("Repository .git must be a directory in the canonical clone");
   }
-  return resolved;
 }
 
-async function runHelper(args) {
-  const { stdout, stderr } = await execFileAsync("/usr/bin/bash", [helper, ...args], {
-    cwd: home,
-    encoding: "utf8",
-    maxBuffer,
-    timeout,
-    windowsHide: true,
-  });
-  return truncateOutput(
-    [stdout.trim(), stderr.trim()].filter(Boolean).join("\n"),
-  );
-}
-
-async function writeJsonAtomic(path, value) {
-  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  await rename(temporary, path);
-}
-
-function processIsAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function readTask(taskId) {
-  const path = join(tasksRoot, `${taskId}.json`);
-  const task = JSON.parse(await readFile(path, "utf8"));
-  if (task.status === "queued") {
-    let launcherPid;
-    try {
-      launcherPid = Number.parseInt(
-        await readFile(join(tasksRoot, `${taskId}.pid`), "utf8"),
-        10,
-      );
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-    if (Number.isInteger(launcherPid)) {
-      task.runnerPid = launcherPid;
-      if (!processIsAlive(launcherPid)) {
-        task.status = "failed";
-        task.error = "task runner exited before starting";
-        task.completedAt = new Date().toISOString();
-        await writeJsonAtomic(path, task);
-      }
-    }
-  }
-  if (task.status === "running" && !processIsAlive(task.runnerPid)) {
-    task.status = "failed";
-    task.error = "task runner exited without recording completion";
-    task.completedAt = new Date().toISOString();
-    await writeJsonAtomic(path, task);
-  }
-  return task;
-}
-
-async function findActiveTask(workItem) {
-  await mkdir(tasksRoot, { recursive: true, mode: 0o700 });
-  for (const name of await readdir(tasksRoot)) {
-    if (!name.endsWith(".json")) continue;
-    const task = await readTask(name.slice(0, -5));
-    if (
-      task.workItem === workItem &&
-      ["queued", "running"].includes(task.status)
-    ) {
-      return task;
-    }
-  }
-  return undefined;
-}
-
-async function dispatchTask(workItem, prompt) {
-  const inspect = JSON.parse(await runHelper(["inspect", String(workItem)]));
-  if (inspect.sandboxStatus !== "present") {
-    throw new Error(`Sandbox is not ready: ${inspect.sandboxStatus}`);
-  }
-  const active = await findActiveTask(workItem);
-  if (active) {
-    throw new Error(`Task ${active.taskId} is already active for this work item`);
-  }
-
-  const taskId = `task-${randomUUID()}`;
-  const task = {
-    taskId,
-    workItem,
-    sandbox: inspect.sandbox,
-    repoDir: inspect.repoDir,
-    status: "queued",
-    createdAt: new Date().toISOString(),
-  };
-  await mkdir(tasksRoot, { recursive: true, mode: 0o700 });
-  await writeFile(join(tasksRoot, `${taskId}.prompt`), prompt, { mode: 0o600 });
-  await writeFile(join(tasksRoot, `${taskId}.log`), "", { mode: 0o600 });
-  await writeJsonAtomic(join(tasksRoot, `${taskId}.json`), task);
-
-  const child = spawn(
-    "/usr/bin/bash",
-    [helper, "dispatch", String(workItem), taskId],
-    {
-      cwd: home,
-      detached: true,
-      stdio: "ignore",
-      env: {
-        ...process.env,
-        SBX_WORK_STATE_ROOT: stateRoot,
-        SBX_WORK_TASKS_ROOT: tasksRoot,
-      },
-    },
-  );
-  await writeFile(join(tasksRoot, `${taskId}.pid`), `${child.pid}\n`, {
-    mode: 0o600,
-  });
-  child.unref();
-  return task;
-}
-
-async function readLogTail(taskId, tailBytes) {
-  const path = join(tasksRoot, `${taskId}.log`);
-  const metadata = await stat(path);
-  const length = Math.min(metadata.size, tailBytes);
-  const handle = await open(path, "r");
-  try {
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, metadata.size - length);
-    return buffer.toString("utf8");
-  } finally {
-    await handle.close();
-  }
-}
-
-function seedStatus(job) {
-  return {
-    workItem: job.workItem,
-    sandbox: `wi-${job.workItem}-vm`,
-    seedStatus: job.status,
-    startedAt: job.startedAt,
-  };
-}
-
-function startSeed(workItem, slug, repo) {
-  const existing = seedJobs.get(workItem);
-  if (existing?.status === "running") return existing;
-
-  const job = {
-    workItem,
-    repo,
-    status: "running",
-    startedAt: new Date().toISOString(),
-    promise: undefined,
-    error: undefined,
-  };
-  job.promise = runHelper(["seed", String(workItem), slug, repo])
-    .then(() => {
-      job.status = "succeeded";
-    })
-    .catch(error => {
-      job.status = "failed";
-      job.error = formatError(error);
-    });
-  seedJobs.set(workItem, job);
-  return job;
-}
-
-async function waitForSeed(workItem, waitSeconds) {
-  const job = seedJobs.get(workItem);
-  if (!job) return undefined;
-  if (job.status === "running" && waitSeconds > 0) {
-    await Promise.race([
-      job.promise,
-      new Promise(resolve => setTimeout(resolve, waitSeconds * 1000)),
-    ]);
-  }
-  if (job.status === "failed") {
-    seedJobs.delete(workItem);
-    return result(job.error || "Sandbox seed failed", true);
-  }
-  if (job.status === "running") {
-    return result(JSON.stringify(seedStatus(job), null, 2));
-  }
-  seedJobs.delete(workItem);
-  return undefined;
-}
+const helperClient = createHelperClient({ helper, home });
+const seedManager = createSeedManager({
+  runHelper: helperClient.run,
+  formatError: helperClient.formatError,
+});
+const taskManager = createTaskManager({
+  helper,
+  home,
+  stateRoot,
+  tasksRoot,
+  runHelper: helperClient.run,
+});
 
 const server = new McpServer({
   name: "sbx-host",
@@ -288,11 +81,14 @@ server.registerTool(
   },
   async ({ workItem, waitSeconds }) => {
     try {
-      const seedResult = await waitForSeed(workItem, waitSeconds);
-      if (seedResult) return seedResult;
-      return result(await runHelper(["inspect", String(workItem)]));
+      const seed = await seedManager.wait(workItem, waitSeconds);
+      if (seed.state === "failed") return result(seed.error, true);
+      if (seed.state === "running") {
+        return result(JSON.stringify(seed.status, null, 2));
+      }
+      return result(await helperClient.run(["inspect", String(workItem)]));
     } catch (error) {
-      return result(formatError(error), true);
+      return result(helperClient.formatError(error), true);
     }
   },
 );
@@ -311,9 +107,11 @@ server.registerTool(
   async ({ workItem, slug, repo }) => {
     try {
       await validateCanonicalRepo(repo);
-      return result(JSON.stringify(seedStatus(startSeed(workItem, slug, repo)), null, 2));
+      return result(
+        JSON.stringify(seedManager.start(workItem, slug, repo), null, 2),
+      );
     } catch (error) {
-      return result(formatError(error), true);
+      return result(helperClient.formatError(error), true);
     }
   },
 );
@@ -330,9 +128,11 @@ server.registerTool(
   },
   async ({ workItem, prompt }) => {
     try {
-      return result(JSON.stringify(await dispatchTask(workItem, prompt), null, 2));
+      return result(
+        JSON.stringify(await taskManager.dispatch(workItem, prompt), null, 2),
+      );
     } catch (error) {
-      return result(formatError(error), true);
+      return result(helperClient.formatError(error), true);
     }
   },
 );
@@ -345,9 +145,9 @@ server.registerTool(
   },
   async ({ taskId }) => {
     try {
-      return result(JSON.stringify(await readTask(taskId), null, 2));
+      return result(JSON.stringify(await taskManager.read(taskId), null, 2));
     } catch (error) {
-      return result(formatError(error), true);
+      return result(helperClient.formatError(error), true);
     }
   },
 );
@@ -363,10 +163,9 @@ server.registerTool(
   },
   async ({ taskId, tailBytes }) => {
     try {
-      await readTask(taskId);
-      return result(await readLogTail(taskId, tailBytes));
+      return result(await taskManager.logs(taskId, tailBytes));
     } catch (error) {
-      return result(formatError(error), true);
+      return result(helperClient.formatError(error), true);
     }
   },
 );
@@ -379,70 +178,39 @@ server.registerTool(
   },
   async ({ taskId }) => {
     try {
-      const task = await readTask(taskId);
-      if (!["queued", "running"].includes(task.status)) {
-        throw new Error(`Task is not active: ${task.status}`);
-      }
-      let runnerPid = task.runnerPid;
-      if (!Number.isInteger(runnerPid)) {
-        try {
-          runnerPid = Number.parseInt(
-            await readFile(join(tasksRoot, `${taskId}.pid`), "utf8"),
-            10,
-          );
-        } catch (error) {
-          if (error?.code !== "ENOENT") throw error;
-        }
-      }
-      if (processIsAlive(runnerPid)) {
-        try {
-          process.kill(-runnerPid, "SIGTERM");
-        } catch (error) {
-          if (error?.code !== "ESRCH") throw error;
-        }
-      }
-      task.status = "canceled";
-      task.cancelRequested = true;
-      task.completedAt = new Date().toISOString();
-      await writeJsonAtomic(join(tasksRoot, `${taskId}.json`), task);
-      return result(JSON.stringify(task, null, 2));
+      return result(JSON.stringify(await taskManager.cancel(taskId), null, 2));
     } catch (error) {
-      return result(formatError(error), true);
+      return result(helperClient.formatError(error), true);
     }
   },
 );
 
-server.registerTool(
-  "export",
-  {
-    description:
-      "Export a clean committed sandbox branch to a standard host worktree and rebase it on the latest remote base.",
-    inputSchema: { workItem: workItemSchema },
-  },
-  async ({ workItem }) => {
-    try {
-      return result(await runHelper(["export", String(workItem)]));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
+for (const [name, description, command] of [
+  [
+    "export",
+    "Export a clean committed sandbox branch to a standard host worktree and rebase it on the latest remote base.",
+    "export",
+  ],
+  [
+    "sync",
+    "Synchronize the reviewed clean host branch back into the existing sandbox clone.",
+    "sync",
+  ],
+]) {
+  server.registerTool(
+    name,
+    {
+      description,
+      inputSchema: { workItem: workItemSchema },
+    },
+    async ({ workItem }) => {
+      try {
+        return result(await helperClient.run([command, String(workItem)]));
+      } catch (error) {
+        return result(helperClient.formatError(error), true);
+      }
+    },
+  );
+}
 
-server.registerTool(
-  "sync",
-  {
-    description:
-      "Synchronize the rebased clean host branch back into the existing sandbox clone.",
-    inputSchema: { workItem: workItemSchema },
-  },
-  async ({ workItem }) => {
-    try {
-      return result(await runHelper(["sync", String(workItem)]));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-const transport = new StdioServerTransport();
-await server.connect(transport);
+await server.connect(new StdioServerTransport());
