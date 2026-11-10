@@ -16,7 +16,7 @@ usage() {
   cat <<'EOF'
 Usage:
   sbx-work inspect WORK_ITEM
-  sbx-work [--dry-run] seed WORK_ITEM SLUG [REPO]
+  sbx-work [--dry-run] seed WORK_ITEM SLUG REPO [REUSE_EXISTING_BRANCH]
   sbx-work dispatch WORK_ITEM TASK_ID
   sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
@@ -82,7 +82,8 @@ case "$command_name" in
     inspect_work "$1"
     ;;
   seed)
-    (($# >= 2 && $# <= 3)) || die "seed requires WORK_ITEM SLUG [REPO]"
+    (($# >= 3 && $# <= 4)) ||
+      die "seed requires WORK_ITEM SLUG REPO [REUSE_EXISTING_BRANCH]"
     acquire_lock
     seed "$@"
     ;;

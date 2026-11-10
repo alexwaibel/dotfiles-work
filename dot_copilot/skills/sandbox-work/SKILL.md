@@ -41,16 +41,20 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 3. Call `sbx-host.inspect` for the work-item ID:
    - If `sandboxStatus` is `present`, verify the repository, branch, base, and
      VM path, then resume that sandbox.
-   - If metadata is absent or `sandboxStatus` is `missing-unexported`, identify
-     the repository and slug, then call
-     `sbx-host.seed`. Seed automatically restores dependencies when the
-     canonical repository declares a supported package manager and configures
-     an Azure Artifacts registry.
+   - If no sandbox exists, determine whether the expected agent branch already
+     exists remotely:
+     - For new work, call `sbx-host.seed` with
+       `reuseExistingBranch: false`; the branch must not already exist.
+     - For an existing PR or follow-up iteration, call `sbx-host.seed` with
+       `reuseExistingBranch: true`; the current remote PR branch head becomes
+       the sandbox baseline. Existing exported metadata is preserved if seed
+       fails, and its host worktree is retained on success.
+   - Seed automatically restores dependencies when the canonical repository
+     declares a supported package manager and configures an Azure Artifacts
+     registry.
      Seed returns immediately; call `sbx-host.inspect` with `waitSeconds: 60`
      until it reports `sandboxStatus: present`. Do not use shell sleeps or start
      another seed while `seedStatus` is `running`.
-   - If `sandboxStatus` is `missing-exported`, stop and preserve the metadata
-     and host worktree for review.
 4. Build a bounded implementation prompt containing the work-item requirements,
    VM repository path and branch, repository-instruction requirement, validation
    expectations, commit trailers, and the prohibition on push/PR/external

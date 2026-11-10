@@ -10,7 +10,7 @@ export function createSeedManager({ runHelper, formatError }) {
     };
   }
 
-  function start(workItem, slug, repo) {
+  function start(workItem, slug, repo, reuseExistingBranch) {
     const existing = jobs.get(workItem);
     if (existing?.status === "running") return status(existing);
 
@@ -21,7 +21,13 @@ export function createSeedManager({ runHelper, formatError }) {
       promise: undefined,
       error: undefined,
     };
-    job.promise = runHelper(["seed", String(workItem), slug, repo])
+    job.promise = runHelper([
+      "seed",
+      String(workItem),
+      slug,
+      repo,
+      String(reuseExistingBranch),
+    ])
       .then(() => {
         job.status = "succeeded";
       })

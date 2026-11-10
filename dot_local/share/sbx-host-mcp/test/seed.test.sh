@@ -117,6 +117,78 @@ else
   fail=$((fail + 1))
 fi
 
+followup_branch="users/alwaibel/agent/132-followup"
+git -C "$repo" checkout -qb "$followup_branch"
+printf 'pr branch\n' >"${repo}/pr.txt"
+git -C "$repo" add pr.txt
+git -C "$repo" commit -qm "PR branch"
+git -C "$repo" push -qu origin "$followup_branch"
+followup_sha="$(git -C "$repo" rev-parse HEAD)"
+git -C "$repo" checkout -q master
+
+cat >"${state_root}/132.json" <<EOF
+{
+  "workItem": "132",
+  "slug": "followup",
+  "repo": "example-repo",
+  "sandbox": "wi-132-vm",
+  "branch": "$followup_branch",
+  "baseBranch": "master",
+  "baseSha": "$(git -C "$repo" rev-parse master)",
+  "repoDir": "/old/repo/path",
+  "hostWorktree": "/preserved/worktree",
+  "exportedCommit": "old-export"
+}
+EOF
+: >"$fake_sbx_log"
+SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_sbx" \
+  bash "$script" seed 132 followup example-repo true >/dev/null
+if [[ "$(jq -r '.baseSha' "${state_root}/132.json")" == "$followup_sha" ]] &&
+  [[ "$(jq -r '.hostWorktree' "${state_root}/132.json")" == "/preserved/worktree" ]] &&
+  grep -q "checkout -B $followup_branch $followup_sha" "$fake_sbx_log"; then
+  record_pass "follow-up seed reuses current remote PR branch"
+else
+  record_fail "follow-up seed reuses current remote PR branch"
+fi
+
+expect_failure "new-work seed rejects an existing PR branch" \
+  env \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_sbx" \
+  bash "$script" seed 132 followup example-repo false
+
+cat >"${state_root}/133.json" <<EOF
+{
+  "workItem": "133",
+  "slug": "followup-failure",
+  "repo": "example-repo",
+  "sandbox": "wi-133-vm",
+  "branch": "users/alwaibel/agent/133-followup-failure",
+  "baseBranch": "master",
+  "baseSha": "$(git -C "$repo" rev-parse master)",
+  "repoDir": "/old/repo/path",
+  "hostWorktree": "/preserved/failure-worktree"
+}
+EOF
+git -C "$repo" branch users/alwaibel/agent/133-followup-failure "$followup_sha"
+git -C "$repo" push -qu origin users/alwaibel/agent/133-followup-failure
+expect_failure "failed follow-up seed restores previous metadata" \
+  env \
+  FAKE_SBX_FAIL_EXEC=true \
+  SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$fake_sbx" \
+  bash "$script" seed 133 followup-failure example-repo true
+if [[ "$(jq -r '.hostWorktree' "${state_root}/133.json")" == "/preserved/failure-worktree" ]] &&
+  [[ ! -e "${state_root}/133.json.seed-backup" ]]; then
+  record_pass "failed follow-up seed preserves prior state"
+else
+  record_fail "failed follow-up seed preserves prior state"
+fi
+
 : >"$fake_sbx_log"
 expect_failure "clean failed seed" \
   env \

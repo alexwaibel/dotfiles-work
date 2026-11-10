@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
   fixture,
@@ -89,6 +90,39 @@ test("seed returns immediately and inspect waits for completion", async t => {
   send(process, {
     jsonrpc: "2.0",
     id: 4,
+    method: "tools/call",
+    params: {
+      name: "seed",
+      arguments: {
+        workItem: 124,
+        slug: "follow-up",
+        repo: "example-repo",
+        reuseExistingBranch: true,
+      },
+    },
+  });
+  const followUp = await readMessage(process);
+  assert.equal(followUp.result.isError, undefined);
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 5,
+    method: "tools/call",
+    params: {
+      name: "inspect",
+      arguments: { workItem: 124, waitSeconds: 2 },
+    },
+  });
+  const followUpCompleted = await readMessage(process);
+  assert.equal(followUpCompleted.result.isError, undefined);
+
+  const helperLog = await readFile(paths.helperLog, "utf8");
+  assert.match(helperLog, /^seed 123 slow-seed example-repo false$/m);
+  assert.match(helperLog, /^seed 124 follow-up example-repo true$/m);
+
+  send(process, {
+    jsonrpc: "2.0",
+    id: 6,
     method: "tools/call",
     params: {
       name: "seed",

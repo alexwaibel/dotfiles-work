@@ -78,12 +78,16 @@ windows_ado_pat() {
 seed() {
   local id="$1"
   local slug="$2"
+  local reuse_existing_branch="${4:-false}"
   local repo
   repo="$(resolve_repo "${3:-}")"
   validate_work_item "$id"
   validate_slug "$slug"
+  [[ "$reuse_existing_branch" == "true" || "$reuse_existing_branch" == "false" ]] ||
+    die "reuse-existing-branch must be true or false"
 
   local repo_path sbx base_branch sandbox branch repo_dir git_name git_email
+  local metadata_to_backup="" metadata_backup="" previous_worktree=""
   repo_path="$(canonical_repo "$repo")"
   sbx="$(find_sbx)"
   base_branch="$(discover_base_branch "$repo_path")"
@@ -96,11 +100,27 @@ seed() {
     die "canonical repository must resolve git user.name and user.email"
 
   if ! $dry_run; then
-    clear_stale_state "$id" "$sbx" "$sandbox"
-    sandbox_exists "$sbx" "$sandbox" &&
-      die "sandbox already exists without metadata: $sandbox"
+    if [[ "$reuse_existing_branch" == "true" && -f "$(state_file "$id")" ]]; then
+      local metadata recorded_sandbox recorded_repo recorded_branch
+      metadata="$(state_file "$id")"
+      recorded_sandbox="$(jq -er '.sandbox' "$metadata")"
+      recorded_repo="$(jq -er '.repo' "$metadata")"
+      recorded_branch="$(jq -er '.branch' "$metadata")"
+      [[ "$recorded_sandbox" == "$sandbox" &&
+        "$recorded_repo" == "$repo" &&
+        "$recorded_branch" == "$branch" ]] ||
+        die "existing metadata does not match the requested PR branch"
+      sandbox_exists "$sbx" "$sandbox" &&
+        die "sandbox already exists for work item $id"
+      previous_worktree="$(jq -r '.hostWorktree // empty' "$metadata")"
+      metadata_to_backup="$metadata"
+    else
+      clear_stale_state "$id" "$sbx" "$sandbox"
+      sandbox_exists "$sbx" "$sandbox" &&
+        die "sandbox already exists without metadata: $sandbox"
+    fi
   else
-    [[ ! -e "$(state_file "$id")" ]] ||
+    [[ "$reuse_existing_branch" == "true" || ! -e "$(state_file "$id")" ]] ||
       die "metadata already exists: $(state_file "$id")"
   fi
 
@@ -108,16 +128,21 @@ seed() {
   if [[ "$sbx" == *.exe ]]; then
     ensure_windows_safe_directory "$repo_path"
   fi
-  git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch" &&
-    die "local branch already exists: $branch"
-  git -C "$repo_path" show-ref --verify --quiet "refs/remotes/origin/$branch" &&
-    die "remote branch already exists: $branch"
-
   note "refreshing ${repo}/${base_branch}"
   run git -C "$repo_path" fetch origin
   run git -C "$repo_path" merge --ff-only "origin/$base_branch"
   local base_sha
-  base_sha="$(git -C "$repo_path" rev-parse "$base_branch")"
+  if [[ "$reuse_existing_branch" == "true" ]]; then
+    git -C "$repo_path" show-ref --verify --quiet "refs/remotes/origin/$branch" ||
+      die "remote PR branch not found: origin/$branch"
+    base_sha="$(git -C "$repo_path" rev-parse "origin/$branch")"
+  else
+    git -C "$repo_path" show-ref --verify --quiet "refs/heads/$branch" &&
+      die "local branch already exists: $branch"
+    git -C "$repo_path" show-ref --verify --quiet "refs/remotes/origin/$branch" &&
+      die "remote branch already exists: $branch"
+    base_sha="$(git -C "$repo_path" rev-parse "$base_branch")"
+  fi
 
   local -a install_command=()
   if uses_azure_artifacts "$repo_path"; then
@@ -126,12 +151,20 @@ seed() {
       die "Azure Artifacts is configured but package.json has no supported packageManager"
   fi
 
+  if [[ -n "$metadata_to_backup" ]]; then
+    metadata_backup="${metadata_to_backup}.seed-backup"
+    mv "$metadata_to_backup" "$metadata_backup"
+  fi
+
   local seed_started=false
   cleanup_incomplete_seed() {
     if $seed_started && ! $dry_run; then
       note "cleaning incomplete sandbox $sandbox"
       sbx_call "$sbx" rm --force "$sandbox" >/dev/null 2>&1 || true
       rm -f "$(state_file "$id")"
+    fi
+    if [[ -n "$metadata_backup" && -f "$metadata_backup" ]]; then
+      mv "$metadata_backup" "$(state_file "$id")"
     fi
   }
   seed_step() {
@@ -170,8 +203,14 @@ seed() {
     cleanup_incomplete_seed
     die "sandbox clone returned an invalid workspace path"
   }
+  local checkout_command
+  if [[ "$reuse_existing_branch" == "true" ]]; then
+    checkout_command="git -C $(printf '%q' "$repo_dir") checkout -B $(printf '%q' "$branch") $(printf '%q' "$base_sha")"
+  else
+    checkout_command="git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch")"
+  fi
   seed_step sbx_exec_shell "$sbx" "$sandbox" \
-    "git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch") && git -C $(printf '%q' "$repo_dir") config user.name $(printf '%q' "$git_name") && git -C $(printf '%q' "$repo_dir") config user.email $(printf '%q' "$git_email")"
+    "$checkout_command && git -C $(printf '%q' "$repo_dir") config user.name $(printf '%q' "$git_name") && git -C $(printf '%q' "$repo_dir") config user.email $(printf '%q' "$git_email")"
   seed_step sbx_exec_shell "$sbx" "$sandbox" \
     'if command -v corepack >/dev/null 2>&1; then
        mkdir -p "$HOME/.local/bin"
@@ -215,6 +254,7 @@ EOF
       --arg baseBranch "$base_branch" \
       --arg baseSha "$base_sha" \
       --arg repoDir "$repo_dir" \
+      --arg hostWorktree "$previous_worktree" \
       '{
         workItem: $id,
         slug: $slug,
@@ -224,8 +264,11 @@ EOF
         baseBranch: $baseBranch,
         baseSha: $baseSha,
         repoDir: $repoDir
-      }'
+      } + if $hostWorktree == "" then {} else {
+        hostWorktree: $hostWorktree
+      } end'
   fi
+  [[ -z "$metadata_backup" ]] || rm -f "$metadata_backup"
   seed_started=false
 
   note "seeded $sandbox"

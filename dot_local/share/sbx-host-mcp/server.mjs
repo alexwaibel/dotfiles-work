@@ -102,13 +102,18 @@ server.registerTool(
       workItem: workItemSchema,
       slug: slugSchema,
       repo: repoSchema,
+      reuseExistingBranch: z.boolean().default(false),
     },
   },
-  async ({ workItem, slug, repo }) => {
+  async ({ workItem, slug, repo, reuseExistingBranch }) => {
     try {
       await validateCanonicalRepo(repo);
       return result(
-        JSON.stringify(seedManager.start(workItem, slug, repo), null, 2),
+        JSON.stringify(
+          seedManager.start(workItem, slug, repo, reuseExistingBranch),
+          null,
+          2,
+        ),
       );
     } catch (error) {
       return result(helperClient.formatError(error), true);
