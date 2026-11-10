@@ -8,6 +8,7 @@ description: Prepare an Azure DevOps pull request for local review in a dedicate
 Prepare the review environment; do not perform a code review, edit product code,
 post comments, vote, push, or change the PR unless separately requested.
 Default to including a ready-to-copy Copilot prompt, not sending it.
+Create a review checkout that tracks the PR source branch.
 
 ## Input and metadata
 
@@ -33,9 +34,8 @@ Default to including a ready-to-copy Copilot prompt, not sending it.
 3. Use the actual target branch, never an assumed `master` or `main`.
    Validate branch refs with `git check-ref-format` before using them.
    For a completed or abandoned PR, report its status. If the source branch is
-   deleted, use a verified source commit only if available locally or fetchable
-   from its verified repository; never substitute the PR merge commit.
-   Stop if the original source revision cannot be recovered.
+   deleted, report that a tracking checkout cannot be prepared and stop.
+   Never substitute the PR merge commit or create an untracked checkout.
 
 ## Repository and worktree
 
@@ -48,9 +48,12 @@ Default to including a ready-to-copy Copilot prompt, not sending it.
    rather than overwrite it.
    Use literal absolute paths in authenticated Git commands.
 
-5. Inspect `git worktree list --porcelain`, branch refs, and applicable repository
-   instructions. Never switch, reset, clean, stash, or modify an existing
-   checkout. Fetch the source and target refs into dedicated review refs in the
+5. Inspect `git worktree list --porcelain`, branch refs, upstreams, working-tree
+   status, and applicable repository instructions. Preserve unrelated checkouts.
+   Never switch, reset, clean, or stash an existing checkout. Only fast-forward
+   an identified clean review worktree as described below.
+   Record the previous private source-ref SHA, if present, before fetching.
+   Fetch the source and target refs into dedicated review refs in the
    canonical repository, not a local checked-out branch. For example:
 
    ```bash
@@ -64,6 +67,12 @@ Default to including a ready-to-copy Copilot prompt, not sending it.
    For fork PRs, fetch source from the verified fork and target from the verified
    destination repository separately; do not assume both exist on origin.
    An explicit source repository URL can be fetched without adding a remote.
+   Also fetch the source into the normal remote-tracking
+   ref of an existing named remote whose repository identity matches the PR
+   source. Verify that ref resolves to the same source SHA before setting an
+   upstream. Never point a fork checkout at the destination's same-named branch.
+   If no matching named remote exists, explain the limitation and obtain
+   approval before adding one; do not silently create an untracked checkout.
 
 6. Resolve both fetched refs to full commit SHAs using `rev-parse --verify` with
    `^{commit}`. If the fetched source differs from the metadata's reported source
@@ -72,29 +81,49 @@ Default to including a ready-to-copy Copilot prompt, not sending it.
    enough relevant history to find the base. If there is no base or there are
    multiple bases, stop and explain rather than invent a single comparison.
    Pin the source, target, and merge-base SHAs for the rest of this invocation.
+   When a previous source SHA exists, require that SHA to be an
+   ancestor of the newly fetched source. If not, report a source-history rewrite
+   and stop for explicit reconciliation before updating any review worktree.
 
-7. Prefer worktree `~/repos/worktrees/<repo>/pr-<id>` with local branch
-   `review/pr-<id>`, created from the pinned source SHA:
+7. Prefer a local branch with the actual PR source
+   branch name and worktree `~/repos/worktrees/<repo>/<source-final-segment>`.
+   Create it from the pinned source SHA, then set its upstream to the verified
+   source remote-tracking branch:
 
    ```bash
    git -C <canonical-path> worktree add <worktree-path> \
-     -b review/pr-<id> <source-sha>
+     -b <source-branch> <source-sha>
+   git -C <worktree-path> branch \
+     --set-upstream-to=<source-remote>/<source-branch> <source-branch>
    ```
 
-   The path's final segment must equal the branch's final segment.
-   Reuse a registered worktree only if repository identity, branch, and HEAD
-   match the expected review checkout, and `git status --porcelain` is empty.
-   If dirty, stale, occupied, or colliding with an existing branch, preserve it
-   and create a fresh `pr-<id>-<short-source-sha>` path and matching
-   `review/pr-<id>-<short-source-sha>` branch. Extend the suffix if needed.
-   Never remove someone else's checkout or move an existing branch.
-   Never create a worktree inside the canonical clone or outside `~/repos`.
+   If that branch already exists, preserve it. Reuse it only when it is an
+   identified review checkout for this PR; otherwise create a tracking alias
+   `review/pr-<id>` at `~/repos/worktrees/<repo>/pr-<id>`, with the same verified
+   upstream. Extend the alias and path with a collision-free suffix if needed.
+   The path's final segment must always equal the branch's final segment.
+
+   On subsequent invocations, refresh metadata, source and target refs, and
+   the merge base before reusing the existing review worktree. Verify its
+   repository, branch, and upstream identity and require an empty
+   `git status --porcelain`. If HEAD is behind the fetched source, require
+   `git merge-base --is-ancestor <head-sha> <source-sha>` to succeed, then run
+   `git -C <worktree-path> merge --ff-only <source-sha>` as a standalone action.
+   If HEAD already equals the source SHA, no update is needed.
+   Stop and explain local changes, local commits, divergence, a detected
+   force-push, or a mismatched upstream; do not reset or replace the worktree
+   to hide the problem. Obtain explicit instructions before reconciliation.
+
+   Never remove someone else's checkout, force-update an existing branch,
+   or create a worktree inside the canonical clone or outside `~/repos`.
 
 8. Create a local comparison branch at the pinned merge base named
    `review-base/pr-<id>-<short-source-sha>-<short-base-sha>`.
    Check for an existing ref first; reuse it only if it resolves to the same
    base SHA, otherwise choose a collision-free suffix. Do not move an existing
-   branch, set upstreams, or create tags.
+   comparison branch, set its upstream, or create tags. On each review refresh,
+   compute the base again and create or reuse the comparison reference for the
+   newly resolved SHAs; tell the user to select that reference in the editor.
    This gives VS Code's reference picker an unambiguous comparison target.
    Verify the worktree HEAD equals the source SHA and remains clean.
 
@@ -118,7 +147,12 @@ Default to including a ready-to-copy Copilot prompt, not sending it.
     **Source Control -> Graph -> right-click the feature tip -> Compare with...**
     and select the `review-base/...` branch created above.
     The base belongs on the left and feature tip on the right.
-    Current VS Code opens a multi-file comparison with the changed-file list.
+    VS Code opens a scrolling multi-file comparison; do not promise a sidebar
+    changed-file list or folder tree. If the user wants a changed-files tree,
+    check for an installed branch-comparison extension and use its documented
+    comparison workflow with the same explicit base and source. If none is
+    installed, explain that an extension is needed for this workflow and
+    recommend one without installing it unless explicitly requested.
     Prefer the explicit reference over automatic "Compare with Merge Base"
     because automatic target detection can choose a different branch.
     Do not invent a CLI flag or rely on undocumented editor commands to open
@@ -145,8 +179,12 @@ Default to including a ready-to-copy Copilot prompt, not sending it.
 
 ## Completion
 
-Report the PR title/link, worktree path, pinned source revision, target branch,
-comparison reference, editor launch outcome, the remaining comparison UI step,
-and optional prompt. Keep it compact. Leave the worktree available for review.
+Report the PR title/link, worktree path, current source revision, local branch
+and upstream, target branch, comparison reference,
+editor launch outcome, the remaining comparison UI step, and optional prompt.
+For tracking checkouts, explain that `git pull --ff-only` in the clean worktree
+updates normal source-branch advances, but rerunning this skill also refreshes
+the target and comparison base. Force-pushes require explicit reconciliation.
+Keep it compact. Leave the worktree available for review.
 Do not install dependencies, run project builds/tests, or create tracking notes.
 Do not publish anything externally or perform telemetry/feedback steps.
