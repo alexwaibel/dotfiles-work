@@ -7,6 +7,6 @@
     "zod": "4.6.7"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs && bash test/sbx-work.test.sh ./sbx-work.sh"
+    "test": "node --test test/*.test.mjs"
   }
 }

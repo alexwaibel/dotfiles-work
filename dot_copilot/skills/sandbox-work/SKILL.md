@@ -18,7 +18,7 @@ The host session owns:
 - review of imported commits
 
 The `sbx` adapter alone handles Windows executable discovery, host-path
-conversion, environment forwarding, and native-clone compatibility. A separate
+conversion, and environment forwarding. A separate
 package credential provider handles Windows AzureAuth. Transfer, worktrees,
 rebasing, and publishing use Linux Git, never Windows Git.
 
@@ -30,10 +30,10 @@ The VM owns:
 - commits on `users/alwaibel/agent/*`
 
 Never give the VM ADO, Teams, mail, deployment, or Git-remote credentials.
-Clone mode mounts the canonical repository read-only at `/run/sandbox/source`;
-the agent can inspect all files there, including ignored and untracked files,
-but works in a separate private clone and cannot modify the host repository.
-Keep secrets and unrelated sensitive files out of canonical repository trees.
+New VMs are mountless. Linux Git bundles seed a private checkout from the selected
+remote commit without mounting the host repository or exposing ignored,
+untracked, or uncommitted host files. The VM checkout has no Git remote.
+Existing clone-mode VMs remain usable but retain their original read-only mount.
 Azure Artifacts credentials may be passed only to the constrained
 package-manager process used by `sbx-host.seed`. The PAT is acquired through
 Windows AzureAuth so Conditional Access uses the authenticated Windows session.
@@ -143,9 +143,13 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 - Seed and Copilot task status and logs are stored under
   `~/.local/state/sbx-work/tasks/`.
   The private worker alone writes status; dispatch returns after its startup
-  acknowledgement. Prompts are passed over stdin, not persisted. Readers do
-  not repair state, and cancellation signals the worker and observes its result.
+  acknowledgement. Prompts use private IPC to the worker and stdin into the VM,
+  not host-side prompt files. Readers do not repair state. Cancellation asks the
+  worker to terminate the VM process group and confirm it has stopped; stopping
+  the host `sbx exec` client alone does not stop VM processes.
   Both task kinds use the same event-driven waiter and survive MCP restarts.
+- Seed, dispatch, export, and sync share one nonblocking lock per work item.
+  Unrelated work items can proceed independently.
 - A reboot or daemon restart should not require recreating the sandbox.
 - Interactive `sbx run --name wi-<work-item>-vm` remains a manual diagnostic
   fallback, not the normal implementation path.
@@ -179,7 +183,8 @@ The `sbx-host` MCP server is the constrained host bridge. It exposes only
 seed/inspection, bounded Copilot dispatch/status/logs/cancel, export, and
 exceptional sync. It does not expose arbitrary host commands or paths.
 There is one coding-task start operation: `sbx-host.dispatch`. Its subprocess
-runner is private, not another CLI command. Seed uses the same minimal persisted
+runner is private, not another CLI command. The only `sbx-work` CLI operation is
+`task-wait`; all other bridge operations use MCP. Seed uses the same minimal persisted
 status/log mechanism so long dependency restores survive MCP restarts. Inspect
 does not wait; use the single `task-wait` completion mechanism for either task.
 
@@ -188,8 +193,11 @@ VM SHA; sync receives an explicit host SHA. Worktree creation, integration,
 conflict resolution, and publication are host decisions using ordinary Git,
 not bridge commands or a separate Git recovery state machine.
 
-Native clone mode provides
-the private VM repository; its Docker-internal Windows Git still requires a
-narrow compatibility shim for Docker v0.51
-passing an invalid empty `core.hooksPath` to Git 2.56. Lifecycle, policy,
-diagnostics, and removal remain native `sbx` operations.
+The host implementation is shared JavaScript used directly by MCP and the
+one-shot waiter. A private Node worker owns persisted task status. Native
+`flock`, atomic file replacement, and filesystem notifications provide locking
+and observation without a separate service manager.
+
+Mountless seeding avoids Docker-internal Windows Git and native-clone
+compatibility shims. Lifecycle, policy, diagnostics, and removal remain native
+`sbx` operations.

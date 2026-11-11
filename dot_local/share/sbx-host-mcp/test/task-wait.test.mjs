@@ -6,11 +6,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { createTaskManager } from "../lib/task-manager.mjs";
+import { createTaskManager } from "../lib/tasks.mjs";
 
 const execute = promisify(execFile);
 const taskId = "task-11111111-1111-1111-1111-111111111111";
-const script = fileURLToPath(new URL("../sbx-work.sh", import.meta.url));
+const script = fileURLToPath(new URL("../cli.mjs", import.meta.url));
 
 async function fixture(t, status = "running") {
   const tasksRoot = await mkdtemp(join(tmpdir(), "sbx-task-wait-"));
@@ -89,7 +89,7 @@ for (const status of ["completed", "failed", "canceled", "running"]) {
       env: { ...process.env, SBX_WORK_TASKS_ROOT: tasksRoot },
       timeout: 3000,
     };
-    const command = execute("bash", [script, "task-wait", taskId, "1"], options);
+    const command = execute(process.execPath, [script, "task-wait", taskId, "1"], options);
     let stdout;
     if (status === "completed") {
       ({ stdout } = await command);
@@ -118,7 +118,7 @@ test("CLI rejects task-path traversal and unbounded deadlines", async t => {
     [taskId, "3601"],
   ]) {
     await assert.rejects(
-      execute("bash", [script, "task-wait", id, seconds], {
+      execute(process.execPath, [script, "task-wait", id, seconds], {
         env: { ...process.env, SBX_WORK_TASKS_ROOT: tasksRoot },
         timeout: 3000,
       }),

@@ -1,28 +1,14 @@
 #!/usr/bin/env node
 
-import { realpath } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createHelperClient } from "./lib/helper-client.mjs";
-import { createTaskManager } from "./lib/task-manager.mjs";
+import { configuration, formatError } from "./lib/runtime.mjs";
+import { createSandbox } from "./lib/sandbox.mjs";
+import { createTaskManager } from "./lib/tasks.mjs";
 
-const home = homedir();
-const reposRoot = resolve(
-  process.env.SBX_HOST_REPOS_ROOT || join(home, "repos"),
-);
-const stateRoot = resolve(
-  process.env.SBX_HOST_STATE_ROOT ||
-    join(process.env.XDG_STATE_HOME || join(home, ".local", "state"), "sbx-work"),
-);
-const tasksRoot = join(stateRoot, "tasks");
-const packageRoot = dirname(fileURLToPath(import.meta.url));
-const helper = resolve(
-  process.env.SBX_HOST_HELPER || join(packageRoot, "sbx-work.sh"),
-);
+const config = configuration();
+const sandbox = createSandbox(config);
 
 const workItemSchema = z.number().int().positive();
 const slugSchema = z
@@ -38,36 +24,7 @@ function result(text, isError = false) {
   };
 }
 
-async function validateCanonicalRepo(repo) {
-  const expected = resolve(reposRoot, repo);
-  const resolved = await realpath(expected);
-  if (resolved !== expected || !resolved.startsWith(`${reposRoot}${sep}`)) {
-    throw new Error(`Repository must be a canonical clone under ${reposRoot}`);
-  }
-  const gitDir = await realpath(join(resolved, ".git"));
-  if (gitDir !== join(resolved, ".git")) {
-    throw new Error("Repository .git must be a directory in the canonical clone");
-  }
-}
-
-const helperClient = createHelperClient({
-  helper,
-  home,
-  env: {
-    ...process.env,
-    SBX_WORK_REPOS_ROOT: reposRoot,
-    SBX_WORK_STATE_ROOT: stateRoot,
-    SBX_WORK_TASKS_ROOT: tasksRoot,
-  },
-});
-const taskManager = createTaskManager({
-  helper,
-  home,
-  reposRoot,
-  stateRoot,
-  tasksRoot,
-  runHelper: helperClient.run,
-});
+const taskManager = createTaskManager(config);
 
 const server = new McpServer({
   name: "sbx-host",
@@ -89,9 +46,9 @@ server.registerTool(
       if (seed) {
         return result(JSON.stringify(seed, null, 2));
       }
-      return result(await helperClient.run(["inspect", String(workItem)]));
+      return result(JSON.stringify(await sandbox.inspect(workItem), null, 2));
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -100,7 +57,7 @@ server.registerTool(
   "seed",
   {
     description:
-      "Start a persisted seed job that creates a native clone-mode Docker Sandbox and restores detected Azure Artifacts dependencies. Returns a taskId for task-wait, task_status, or task_logs.",
+      "Start a persisted seed job that creates a mountless Docker Sandbox from committed Git objects and restores detected Azure Artifacts dependencies. Returns a taskId for task-wait, task_status, or task_logs.",
     inputSchema: {
       workItem: workItemSchema,
       slug: slugSchema,
@@ -110,7 +67,6 @@ server.registerTool(
   },
   async ({ workItem, slug, repo, reuseExistingBranch }) => {
     try {
-      await validateCanonicalRepo(repo);
       return result(
         JSON.stringify(
           await taskManager.startSeed(workItem, slug, repo, reuseExistingBranch),
@@ -119,7 +75,7 @@ server.registerTool(
         ),
       );
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -140,7 +96,7 @@ server.registerTool(
         JSON.stringify(await taskManager.dispatch(workItem, prompt), null, 2),
       );
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -155,7 +111,7 @@ server.registerTool(
     try {
       return result(JSON.stringify(await taskManager.read(taskId), null, 2));
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -173,7 +129,7 @@ server.registerTool(
     try {
       return result(await taskManager.logs(taskId, tailBytes));
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -181,14 +137,14 @@ server.registerTool(
 server.registerTool(
   "cancel",
   {
-    description: "Cancel one running dispatched sandbox task.",
+    description: "Signal a running task inside its VM and confirm its process group has stopped.",
     inputSchema: { taskId: taskIdSchema },
   },
   async ({ taskId }) => {
     try {
       return result(JSON.stringify(await taskManager.cancel(taskId), null, 2));
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -202,9 +158,9 @@ server.registerTool(
   },
   async ({ workItem }) => {
     try {
-      return result(await helperClient.run(["export", String(workItem)]));
+      return result(JSON.stringify(await taskManager.export(workItem), null, 2));
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );
@@ -221,9 +177,9 @@ server.registerTool(
   },
   async ({ workItem, commit }) => {
     try {
-      return result(await helperClient.run(["sync", String(workItem), commit]));
+      return result(JSON.stringify(await taskManager.sync(workItem, commit), null, 2));
     } catch (error) {
-      return result(helperClient.formatError(error), true);
+      return result(formatError(error), true);
     }
   },
 );

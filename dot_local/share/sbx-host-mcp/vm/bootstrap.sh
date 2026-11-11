@@ -6,13 +6,7 @@ branch="$2"
 base="$3"
 git_name="$4"
 git_email="$5"
-reuse="$6"
-
-if [[ "$reuse" == true ]]; then
-  git -C "$repo" checkout -B "$branch" "$base"
-else
-  git -C "$repo" checkout -b "$branch" "$base"
-fi
+git -C "$repo" checkout -b "$branch" "$base"
 git -C "$repo" config user.name "$git_name"
 git -C "$repo" config user.email "$git_email"
 
