@@ -33,16 +33,18 @@ if [[ "$1" == "inspect" ]]; then
   printf '{"workItem":"123","sandbox":"wi-123-vm","repoDir":"/home/agent/workspace/example-repo","sandboxStatus":"present"}\n'
   exit 0
 fi
-if [[ "$1" == "dispatch" || "$1" == "run-job" ]]; then
+if [[ "$1" == "--run-task" ]]; then
   task="$SBX_WORK_STATE_ROOT/tasks/$3.json"
   log="$SBX_WORK_STATE_ROOT/tasks/$3.log"
-  prompt="$SBX_WORK_STATE_ROOT/tasks/$3.prompt"
   tmp="$task.tmp"
-  if [[ -f "$prompt" ]] && grep -q '^WAIT_QUEUED' "$prompt"; then
+  request="$(cat)"
+  jq 'del(.prompt) | .status = "running" | .runnerPid = $pid' --argjson pid "$$" <<<"$request" >"$tmp"
+  mv "$tmp" "$task"
+  trap 'jq '\\''.status = "canceled"'\\'' "$task" >"$tmp"; mv "$tmp" "$task"; exit 130' TERM INT
+  jq -c . "$task"
+  if jq -er '.prompt // ""' <<<"$request" | grep -q '^WAIT_RUNNING'; then
     sleep 5
   fi
-  jq '.status = "running" | .runnerPid = $pid' --argjson pid "$$" "$task" >"$tmp"
-  mv "$tmp" "$task"
   code=0
   if [[ "$(jq -r '.kind' "$task")" == "seed" ]]; then
     bash "$0" seed "$2" "$(jq -r '.seed.slug' "$task")" \
@@ -66,6 +68,12 @@ fi
 printf 'helper: %s\\n' "$*"
 `,
     { mode: 0o700 },
+  );
+  await writeFile(
+    join(root, "run-task.sh"),
+    `#!/usr/bin/env bash
+exec bash ${JSON.stringify(helper)} --run-task "$@"
+`,
   );
   return { root, repos, state, helper, helperLog };
 }

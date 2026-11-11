@@ -17,23 +17,20 @@ usage() {
 Usage:
   sbx-work inspect WORK_ITEM
   sbx-work [--dry-run] seed WORK_ITEM SLUG REPO [REUSE_EXISTING_BRANCH]
-  sbx-work dispatch WORK_ITEM TASK_ID
-  sbx-work run-job WORK_ITEM TASK_ID
   sbx-work task-wait TASK_ID [TIMEOUT_SECONDS]
   sbx-work [--dry-run] export WORK_ITEM
-  sbx-work integrate WORK_ITEM
-  sbx-work [--dry-run] sync WORK_ITEM
+  sbx-work [--dry-run] sync WORK_ITEM COMMIT
 
 Commands:
   inspect   Report transfer metadata and whether its sandbox still exists.
   seed      Create a native clone-mode sandbox, create the task branch, and
             restore detected Azure Artifacts dependencies before agent startup.
-  dispatch  Run one noninteractive Copilot task in the existing sandbox.
-  run-job   Run a persisted seed or Copilot job (internal launcher).
   task-wait Wait locally for task completion (default 1800s, maximum 3600s).
   export    Verify and import the exact VM commit; leave host branches unchanged.
-  integrate Rebase imported work in the host worktree and verify patch equality.
-  sync      Transfer the rebased host branch back into the VM.
+  sync      Transfer an explicit full commit SHA into the clean VM checkout.
+
+Start coding tasks through sbx-host.dispatch. The subprocess runner is private.
+Use ordinary host Git commands to review and integrate imported refs.
 
 Use native sbx commands for everything else:
   sbx run --name wi-<id>-vm
@@ -58,12 +55,8 @@ source "$SCRIPT_DIR/lib/sbx-adapter.sh"
 source "$SCRIPT_DIR/lib/package-auth.sh"
 # shellcheck source=commands/seed.sh
 source "$SCRIPT_DIR/commands/seed.sh"
-# shellcheck source=commands/dispatch.sh
-source "$SCRIPT_DIR/commands/dispatch.sh"
 # shellcheck source=commands/transfer.sh
 source "$SCRIPT_DIR/commands/transfer.sh"
-# shellcheck source=commands/integrate.sh
-source "$SCRIPT_DIR/commands/integrate.sh"
 while (($#)); do
   case "$1" in
     --dry-run)
@@ -99,10 +92,6 @@ case "$command_name" in
     acquire_lock
     seed "$@"
     ;;
-  dispatch | run-job)
-    (($# == 2)) || die "$command_name requires WORK_ITEM TASK_ID"
-    run_job "$1" "$2"
-    ;;
   task-wait)
     (($# >= 1 && $# <= 2)) || die "task-wait requires TASK_ID [TIMEOUT_SECONDS]"
     validate_task_id "$1"
@@ -114,15 +103,9 @@ case "$command_name" in
     export_work "$1"
     ;;
   sync)
-    (($# == 1)) || die "sync requires WORK_ITEM"
+    (($# == 2)) || die "sync requires WORK_ITEM COMMIT"
     acquire_lock
-    sync_work "$1"
-    ;;
-  integrate)
-    (($# == 1)) || die "integrate requires WORK_ITEM"
-    $dry_run && die "integrate does not support dry-run; use export to import without integration"
-    acquire_lock
-    integrate_work "$1"
+    sync_work "$1" "$2"
     ;;
   *)
     die "unknown command: $command_name"

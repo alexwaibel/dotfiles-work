@@ -52,12 +52,13 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
        `reuseExistingBranch: false`; the branch must not already exist.
      - For an existing PR or follow-up iteration, call `sbx-host.seed` with
        `reuseExistingBranch: true`; the current remote PR branch head becomes
-       the sandbox baseline. Existing exported metadata is preserved if seed
-       fails, and its host worktree is retained on success.
+       the sandbox baseline. Existing metadata is preserved if seed fails.
+       Host worktrees are independent of sandbox preparation.
    - Seed automatically restores dependencies when the canonical repository
      declares a supported package manager and configures an Azure Artifacts
      registry.
-     Seed returns immediately with a persisted `taskId`. Use the one-shot
+     Seed returns immediately with the same persisted task result as dispatch.
+     Use the one-shot
      `sbx-work task-wait <task-id>` procedure in step 5, then call
      `sbx-host.inspect` once to verify readiness. Do not start another seed
      while the existing seed job is active.
@@ -84,7 +85,7 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
    Copilot process with the repository state and dependencies preserved.
 7. The VM task must read the repository's `AGENTS.md`, `README.md`, and package
    metadata; run required post-restore setup; implement; validate; and commit
-   without push or PR. Seed creates user-local package-manager shims and
+   only when authorized, without push or PR. Seed creates user-local package-manager shims and
    configures repository-local Git identity.
 8. If Balanced networking blocks a required package or API host, inspect the
    Docker policy log and add only the required sandbox-scoped rule:
@@ -93,14 +94,8 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
    sbx policy allow network --sandbox wi-<work-item>-vm '<host-rule>'
    ```
 
-9. Use checkpoints:
-   - baseline setup and tests
-   - structural comparison and data-flow trace
-   - one root-cause theory
-   - failing regression test
-   - minimal implementation
-   - focused and full validation
-   - commit without push or PR
+9. Keep tasks bounded: establish a baseline, investigate, implement the smallest
+   fix, validate, and commit only when authorized.
 10. Keep browser reproduction and live network inspection on the host.
 11. When the VM has a clean committed change:
     - Call `sbx-host.export`. It creates a VM Git bundle, copies it through
@@ -108,13 +103,14 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
       a dedicated immutable ref using Linux Git. It does not fetch origin,
       alter a host worktree, or rebase.
     - Confirm `importedCommit` matches VM HEAD.
-    - Separately run `sbx-work integrate <work-item>` on the host when ready
-      to integrate. This fetches origin, prepares the standard worktree,
-      rebases, and checks aggregate patch equality. Conflicts preserve pending
-      provenance for recovery; finish the rebase and rerun integration to
-      verify it. Do not automatically publish after import alone.
-12. Review the host worktree diff against the work item. If the rebase was
-    clean, the patch was preserved, and no host edits are needed:
+    - Use ordinary Linux Git commands on the host to fetch, create or reuse
+      `~/repos/worktrees/<repo>/<branch-slug>`, and integrate the imported ref.
+      Choose fast-forward, cherry-pick, or rebase based on the actual history
+      and the user's instructions. The bridge does not make these decisions.
+      Preserve both histories on conflicts or uncertainty; inspect the diff
+      and use normal Git recovery rather than transfer metadata.
+12. Review the final host diff against the work item and validate the final
+    revision before publishing:
     - Push only the expected `users/alwaibel/agent/<id>-<slug>` branch.
     - Follow any repository PR skill, template, and instructions.
     - Compose the PR from the work item, final diff, and verified outcomes; do
@@ -122,9 +118,13 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
     - Apply the global External Artifact Hygiene policy before creating the
       draft PR. Repository conventions are additive.
     - Let CI validate the final rebased commit.
-13. Call `sbx-host.sync` only when conflicts, host review, or requested
-    follow-up require more VM work. Prefer a fresh VM Copilot session for that
-    validation rather than returning to the implementation context.
+13. Call `sbx-host.sync(workItem, commit)` only when host integration or requested
+    follow-up requires more VM work. Pass the explicit full reviewed commit SHA
+    available in the canonical repository's object store. Sync transfers only
+    that committed revision; it does not include uncommitted host changes.
+    It rejects a dirty VM or unexpected branch, transfers a self-contained
+    bundle, and verifies the resulting VM HEAD. It does not fetch or rebase.
+    Prefer a fresh validation-only dispatch for checking the integrated commit.
 14. Stop the VM for PR follow-up using Docker directly:
 
    ```bash
@@ -140,9 +140,12 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 ## Recovery
 
 - Transfer metadata is stored under `~/.local/state/sbx-work/`.
-- Seed and Copilot job metadata, PIDs, and logs are stored under
+- Seed and Copilot task status and logs are stored under
   `~/.local/state/sbx-work/tasks/`.
-  Both use the same event-driven waiter and survive MCP server restarts.
+  The private worker alone writes status; dispatch returns after its startup
+  acknowledgement. Prompts are passed over stdin, not persisted. Readers do
+  not repair state, and cancellation signals the worker and observes its result.
+  Both task kinds use the same event-driven waiter and survive MCP restarts.
 - A reboot or daemon restart should not require recreating the sandbox.
 - Interactive `sbx run --name wi-<work-item>-vm` remains a manual diagnostic
   fallback, not the normal implementation path.
@@ -165,8 +168,8 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
   ```
 
   If `gh auth status` fails, run `gh auth login --hostname github.com` first.
-- If import, integration, or synchronization fails, keep the VM, imported refs,
-  and host worktree. Do not delete state or bypass bundle/patch verification.
+- If import or synchronization fails, keep the VM, imported refs, and host
+  worktree. Do not delete state or bypass bundle/SHA verification.
 - Before running `sbx rm`, confirm the VM is clean and its HEAD matches the
   exact imported or synchronized commit, not merely a rebased host HEAD.
 
@@ -175,8 +178,17 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 The `sbx-host` MCP server is the constrained host bridge. It exposes only
 seed/inspection, bounded Copilot dispatch/status/logs/cancel, export, and
 exceptional sync. It does not expose arbitrary host commands or paths.
-Both transfer directions use Git bundles and `sbx cp`. The import ref preserves
-the exact VM SHA independently of host integration. Native clone mode provides
+There is one coding-task start operation: `sbx-host.dispatch`. Its subprocess
+runner is private, not another CLI command. Seed uses the same minimal persisted
+status/log mechanism so long dependency restores survive MCP restarts. Inspect
+does not wait; use the single `task-wait` completion mechanism for either task.
+
+Both transfer directions use Git bundles and `sbx cp`. Export imports an exact
+VM SHA; sync receives an explicit host SHA. Worktree creation, integration,
+conflict resolution, and publication are host decisions using ordinary Git,
+not bridge commands or a separate Git recovery state machine.
+
+Native clone mode provides
 the private VM repository; its Docker-internal Windows Git still requires a
 narrow compatibility shim for Docker v0.51
 passing an invalid empty `core.hooksPath` to Git 2.56. Lifecycle, policy,

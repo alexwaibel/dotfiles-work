@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { readFile, rm } from "node:fs/promises";
 import { test } from "node:test";
+import { join } from "node:path";
+import { createTaskManager } from "../lib/task-manager.mjs";
 import {
   fixture,
   initialize,
@@ -9,6 +11,10 @@ import {
   send,
   startServer,
 } from "./mcp-test-helpers.mjs";
+
+function tasks(paths) {
+  return createTaskManager({ tasksRoot: join(paths.state, "tasks") });
+}
 
 test("lists the constrained tool surface", async t => {
   const paths = await fixture();
@@ -50,7 +56,7 @@ test("inspect returns only allowlisted metadata", async t => {
   assert.doesNotMatch(text, /must-not-leak/);
 });
 
-test("seed returns immediately and inspect waits for completion", async t => {
+test("seed returns immediately and uses the single task completion waiter", async t => {
   const paths = await fixture();
   const process = startServer(paths);
   t.after(() => process.kill());
@@ -72,16 +78,18 @@ test("seed returns immediately and inspect waits for completion", async t => {
   const response = await readMessage(process);
   assert.equal(response.result.isError, undefined);
   assert.ok(Date.now() - started < 750);
-  assert.match(response.result.content[0].text, /"seedStatus": "running"/);
+  const task = JSON.parse(response.result.content[0].text);
+  assert.match(task.taskId, /^task-/);
   assert.doesNotMatch(response.result.content[0].text, /repoDir/);
 
+  assert.equal((await tasks(paths).wait(task.taskId, 5000)).task.status, "completed");
   send(process, {
     jsonrpc: "2.0",
     id: 3,
     method: "tools/call",
     params: {
       name: "inspect",
-      arguments: { workItem: 123, waitSeconds: 2 },
+      arguments: { workItem: 123 },
     },
   });
   const completed = await readMessage(process);
@@ -104,6 +112,8 @@ test("seed returns immediately and inspect waits for completion", async t => {
   });
   const followUp = await readMessage(process);
   assert.equal(followUp.result.isError, undefined);
+  const followUpTask = JSON.parse(followUp.result.content[0].text);
+  assert.equal((await tasks(paths).wait(followUpTask.taskId, 5000)).task.status, "completed");
 
   send(process, {
     jsonrpc: "2.0",
@@ -111,7 +121,7 @@ test("seed returns immediately and inspect waits for completion", async t => {
     method: "tools/call",
     params: {
       name: "inspect",
-      arguments: { workItem: 124, waitSeconds: 2 },
+      arguments: { workItem: 124 },
     },
   });
   const followUpCompleted = await readMessage(process);
@@ -148,13 +158,32 @@ test("failed helper output is bounded", async t => {
     jsonrpc: "2.0",
     id: 2,
     method: "tools/call",
-    params: { name: "sync", arguments: { workItem: 999 } },
+    params: { name: "sync", arguments: { workItem: 999, commit: "a".repeat(40) } },
   });
   const response = await readMessage(process);
   const text = response.result.content[0].text;
   assert.equal(response.result.isError, true);
   assert.match(text, /output truncated/);
   assert.ok(text.length < 34 * 1024);
+});
+
+test("sync requires and forwards an explicit full commit SHA", async t => {
+  const paths = await fixture();
+  const process = startServer(paths);
+  t.after(() => process.kill());
+  await initialize(process);
+  send(process, {
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: { name: "sync", arguments: { workItem: 123 } },
+  });
+  assert.equal((await readMessage(process)).result.isError, true);
+  const commit = "b".repeat(40);
+  send(process, {
+    jsonrpc: "2.0", id: 3, method: "tools/call",
+    params: { name: "sync", arguments: { workItem: 123, commit } },
+  });
+  assert.equal((await readMessage(process)).result.isError, undefined);
+  assert.match(await readFile(paths.helperLog, "utf8"), new RegExp(`^sync 123 ${commit}$`, "m"));
 });
 
 test("seed runner survives an MCP server restart", async t => {
@@ -179,9 +208,10 @@ test("seed runner survives an MCP server restart", async t => {
   const restarted = startServer(paths);
   t.after(() => restarted.kill());
   await initialize(restarted);
+  assert.equal((await tasks(paths).wait(taskId, 5000)).task.status, "completed");
   send(restarted, {
     jsonrpc: "2.0", id: 2, method: "tools/call",
-    params: { name: "inspect", arguments: { workItem: 123, waitSeconds: 3 } },
+    params: { name: "inspect", arguments: { workItem: 123 } },
   });
   const inspected = await readMessage(restarted);
   assert.equal(inspected.result.isError, undefined);

@@ -6,11 +6,10 @@ import {
   open,
   readFile,
   readdir,
-  rename,
   stat,
-  writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createInterface } from "node:readline";
 
 export function createTaskManager({
   helper,
@@ -20,14 +19,6 @@ export function createTaskManager({
   tasksRoot,
   runHelper,
 }) {
-  async function writeJsonAtomic(path, value) {
-    const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
-      mode: 0o600,
-    });
-    await rename(temporary, path);
-  }
-
   function processIsAlive(pid) {
     if (!Number.isInteger(pid) || pid <= 0) return false;
     try {
@@ -39,53 +30,32 @@ export function createTaskManager({
   }
 
   async function read(taskId) {
-    const path = join(tasksRoot, `${taskId}.json`);
-    const task = JSON.parse(await readFile(path, "utf8"));
-    if (task.status === "queued") {
-      let launcherPid;
-      try {
-        launcherPid = Number.parseInt(
-          await readFile(join(tasksRoot, `${taskId}.pid`), "utf8"),
-          10,
-        );
-      } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
-      }
-      if (Number.isInteger(launcherPid)) {
-        task.runnerPid = launcherPid;
-        if (!processIsAlive(launcherPid)) {
-          task.status = "failed";
-          task.error = "task runner exited before starting";
-          task.completedAt = new Date().toISOString();
-          await writeJsonAtomic(path, task);
-        }
-      }
-    }
+    const task = JSON.parse(
+      await readFile(join(tasksRoot, `${taskId}.json`), "utf8"),
+    );
     if (task.status === "running" && !processIsAlive(task.runnerPid)) {
-      task.status = "failed";
-      task.error = "task runner exited without recording completion";
-      task.completedAt = new Date().toISOString();
-      await writeJsonAtomic(path, task);
+      return {
+        ...task,
+        status: "failed",
+        error: "task runner exited without recording completion",
+      };
     }
     return task;
   }
 
-  async function find(workItem, { activeOnly = false, kind } = {}) {
+  async function find(workItem, { kind } = {}) {
     await mkdir(tasksRoot, { recursive: true, mode: 0o700 });
-    let latest;
     for (const name of await readdir(tasksRoot)) {
       if (!name.endsWith(".json")) continue;
       const task = await read(name.slice(0, -5));
       if (
         task.workItem === workItem &&
         (!kind || task.kind === kind) &&
-        (!activeOnly || ["queued", "running"].includes(task.status)) &&
-        (!latest || task.createdAt > latest.createdAt)
+        task.status === "running"
       ) {
-        latest = task;
+        return task;
       }
     }
-    return latest;
   }
 
   async function launch(workItem, details, prompt) {
@@ -94,53 +64,57 @@ export function createTaskManager({
       taskId,
       workItem,
       ...details,
-      status: "queued",
       createdAt: new Date().toISOString(),
     };
     await mkdir(tasksRoot, { recursive: true, mode: 0o700 });
-    if (prompt !== undefined) {
-      await writeFile(join(tasksRoot, `${taskId}.prompt`), prompt, { mode: 0o600 });
-    }
-    await writeFile(join(tasksRoot, `${taskId}.log`), "", { mode: 0o600 });
-    await writeJsonAtomic(join(tasksRoot, `${taskId}.json`), task);
-
-    const child = spawn(
-      "/usr/bin/bash",
-      [helper, "run-job", String(workItem), taskId],
-      {
-        cwd: home,
-        detached: true,
-        stdio: "ignore",
-        env: {
-          ...process.env,
-          SBX_WORK_REPOS_ROOT:
-            reposRoot || process.env.SBX_WORK_REPOS_ROOT || join(home, "repos"),
-          SBX_WORK_STATE_ROOT: stateRoot,
-          SBX_WORK_TASKS_ROOT: tasksRoot,
-        },
-      },
-    );
+    const log = await open(join(tasksRoot, `${taskId}.log`), "w", 0o600);
     try {
-      await new Promise((resolve, reject) => {
-        child.once("spawn", resolve);
+      const child = spawn(
+        "/usr/bin/bash",
+        [join(dirname(helper), "run-task.sh"), String(workItem), taskId],
+        {
+          cwd: home,
+          detached: true,
+          stdio: ["pipe", "pipe", log.fd],
+          env: {
+            ...process.env,
+            SBX_WORK_REPOS_ROOT:
+              reposRoot || process.env.SBX_WORK_REPOS_ROOT || join(home, "repos"),
+            SBX_WORK_STATE_ROOT: stateRoot,
+            SBX_WORK_TASKS_ROOT: tasksRoot,
+          },
+        },
+      );
+      const ready = createInterface({ input: child.stdout });
+      const started = new Promise((resolve, reject) => {
+        ready.once("line", line => {
+          try {
+            resolve(JSON.parse(line));
+          } catch (error) {
+            reject(error);
+          }
+        });
         child.once("error", reject);
+        child.once("exit", code => reject(
+          new Error(`Task ${taskId} exited before startup (${code}); see its log`),
+        ));
+        child.stdin.on("error", reject);
       });
-      await writeFile(join(tasksRoot, `${taskId}.pid`), `${child.pid}\n`, {
-        mode: 0o600,
-      });
-    } catch (error) {
-      task.status = "failed";
-      task.error = error.message;
-      task.completedAt = new Date().toISOString();
-      await writeJsonAtomic(join(tasksRoot, `${taskId}.json`), task);
-      throw error;
+      child.stdin.end(JSON.stringify({ ...task, prompt }));
+      try {
+        return await started;
+      } finally {
+        ready.close();
+        child.stdout.destroy();
+        child.unref();
+      }
+    } finally {
+      await log.close();
     }
-    child.unref();
-    return task;
   }
 
   async function dispatch(workItem, prompt) {
-    const active = await find(workItem, { activeOnly: true });
+    const active = await find(workItem);
     if (active) {
       throw new Error(`Task ${active.taskId} is already active for this work item`);
     }
@@ -160,7 +134,7 @@ export function createTaskManager({
   }
 
   async function startSeed(workItem, slug, repo, reuseExistingBranch) {
-    const active = await find(workItem, { activeOnly: true });
+    const active = await find(workItem);
     if (active) {
       if (
         active.kind === "seed" &&
@@ -180,7 +154,6 @@ export function createTaskManager({
   }
 
   async function logs(taskId, tailBytes) {
-    await read(taskId);
     const path = join(tasksRoot, `${taskId}.log`);
     const metadata = await stat(path);
     const length = Math.min(metadata.size, tailBytes);
@@ -205,8 +178,7 @@ export function createTaskManager({
       const watcher = watch(tasksRoot, (_event, filename) => {
         if (
           !filename ||
-          filename === `${taskId}.json` ||
-          filename === `${taskId}.pid`
+          filename === `${taskId}.json`
         ) {
           check().catch(fail);
         }
@@ -228,7 +200,7 @@ export function createTaskManager({
       async function check(deadlineReached = false) {
         if (finished) return;
         const task = await read(taskId);
-        const active = ["queued", "running"].includes(task.status);
+        const active = task.status === "running";
         if (!active || deadlineReached) {
           finish(undefined, { task, timedOut: active });
         }
@@ -245,32 +217,15 @@ export function createTaskManager({
     if (task.kind === "seed") {
       throw new Error("Seed cancellation requires native Docker lifecycle recovery");
     }
-    if (!["queued", "running"].includes(task.status)) {
+    if (task.status !== "running") {
       throw new Error(`Task is not active: ${task.status}`);
     }
-    let runnerPid = task.runnerPid;
-    if (!Number.isInteger(runnerPid)) {
-      try {
-        runnerPid = Number.parseInt(
-          await readFile(join(tasksRoot, `${taskId}.pid`), "utf8"),
-          10,
-        );
-      } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
-      }
+    try {
+      process.kill(-task.runnerPid, "SIGTERM");
+    } catch (error) {
+      if (error?.code !== "ESRCH") throw error;
     }
-    if (processIsAlive(runnerPid)) {
-      try {
-        process.kill(-runnerPid, "SIGTERM");
-      } catch (error) {
-        if (error?.code !== "ESRCH") throw error;
-      }
-    }
-    task.status = "canceled";
-    task.cancelRequested = true;
-    task.completedAt = new Date().toISOString();
-    await writeJsonAtomic(join(tasksRoot, `${taskId}.json`), task);
-    return task;
+    return (await wait(taskId, 5000)).task;
   }
 
   return { cancel, dispatch, find, logs, read, startSeed, wait };

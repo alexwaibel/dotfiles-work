@@ -7,14 +7,14 @@ mkdir -p "$state_root/tasks"
 
 seed_job() {
   local id="$1" task_id="$2"
-  jq -n --argjson workItem "$id" --arg taskId "$task_id" \
-    '{taskId: $taskId, workItem: $workItem, kind: "seed", status: "queued",
-      seed: {slug: "durable-seed", repo: "example-repo", reuseExistingBranch: false}}' \
-    >"$state_root/tasks/$task_id.json"
+  local request
+  request="$(jq -n --argjson workItem "$id" --arg taskId "$task_id" \
+    '{taskId: $taskId, workItem: $workItem, kind: "seed",
+      seed: {slug: "durable-seed", repo: "example-repo", reuseExistingBranch: false}}')"
   SBX_WORK_REPOS_ROOT="$repos_root" \
     SBX_WORK_STATE_ROOT="$state_root" \
     SBX_WORK_SBX_BIN="$fake_sbx" \
-    bash "$script" run-job "$id" "$task_id"
+    bash "$(dirname "$(realpath "$script")")/run-task.sh" "$id" "$task_id" <<<"$request"
 }
 
 task_id="task-11111111-1111-1111-1111-111111111111"
@@ -40,6 +40,7 @@ if jq -e '.status == "failed" and .exitCode != 0 and .completedAt != null' \
   record_pass "seed failure records terminal status and preserves atomic cleanup"
 else
   record_fail "seed failure records terminal status and preserves atomic cleanup"
+  cat "$state_root/tasks/$failed_id.json" "$state_root/tasks/$failed_id.log"
 fi
 
 finish_tests

@@ -51,46 +51,48 @@ export_work() (
 
 sync_work() (
   local id="$1"
+  local commit="$2"
   validate_work_item "$id"
-  local sbx sandbox branch base_sha repo_dir worktree
+  [[ "$commit" =~ ^([a-f0-9]{40}|[a-f0-9]{64})$ ]] ||
+    die "sync requires a full commit SHA"
+  local sbx sandbox branch repo_dir repo_path
   sbx="$(find_sbx)"
   sandbox="$(state_value "$id" '.sandbox')"
   branch="$(state_value "$id" '.branch')"
-  base_sha="$(state_value "$id" '.baseSha')"
   repo_dir="$(state_value "$id" '.repoDir')"
-  worktree="$(state_value "$id" '.hostWorktree')"
+  repo_path="$(canonical_repo "$(state_value "$id" '.repo')")"
 
-  [[ -z "$(git -C "$worktree" status --porcelain)" ]] ||
-    die "host worktree has uncommitted changes"
-  [[ "$(git -C "$worktree" branch --show-current)" == "$branch" ]] ||
-    die "host worktree is not on the expected branch"
+  [[ "$(git -C "$repo_path" rev-parse --verify "$commit^{commit}")" == "$commit" ]] ||
+    die "sync source is not an available commit"
   [[ -z "$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" status --porcelain)" ]] ||
     die "sandbox repository has uncommitted changes"
   [[ "$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" branch --show-current)" == "$branch" ]] ||
     die "sandbox repository is not on the expected branch"
 
-  local synced_commit vm_bundle="/tmp/sbx-work-${id}-sync-${BASHPID}.bundle"
-  synced_commit="$(git -C "$worktree" rev-parse HEAD)"
+  local vm_bundle="/tmp/sbx-work-${id}-sync-${BASHPID}.bundle"
+  local sync_ref="refs/sbx-work/transfers/$id/$BASHPID"
   local bundle="${state_root}/${id}-sync.bundle"
   if ! $dry_run; then
     bundle="$(mktemp "${state_root}/${id}-sync.XXXXXX.bundle")"
-    trap 'rm -f -- "$bundle"; sbx_call "$sbx" exec "$sandbox" -- rm -f -- "$vm_bundle" >/dev/null 2>&1 || true' EXIT
+    trap 'rm -f -- "$bundle"; git -C "$repo_path" update-ref -d "$sync_ref" "$commit"; sbx_call "$sbx" exec "$sandbox" -- rm -f -- "$vm_bundle" >/dev/null 2>&1 || true' EXIT
   fi
-  run git -C "$worktree" bundle create "$bundle" "$branch" "^$base_sha"
-  run git -C "$worktree" bundle verify "$bundle"
+  # A self-contained bundle also works with shallow or disconnected VM history.
+  run git -C "$repo_path" update-ref "$sync_ref" "$commit" ""
+  run git -C "$repo_path" bundle create "$bundle" "$sync_ref"
+  run git -C "$repo_path" bundle verify "$bundle"
   if ! $dry_run; then
-    [[ "$(git -C "$worktree" bundle list-heads "$bundle" "refs/heads/$branch")" == "$synced_commit refs/heads/$branch" ]] ||
-      die "bundle does not match the captured host HEAD"
+    [[ "$(git -C "$repo_path" bundle list-heads "$bundle" "$sync_ref")" == "$commit $sync_ref" ]] ||
+      die "bundle does not match the requested commit"
   fi
   run sbx_copy_to "$sbx" "$sandbox" "$bundle" "$vm_bundle"
   run sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" bundle verify "$vm_bundle"
   sbx_exec_shell "$sbx" "$sandbox" \
-    "cd $(printf '%q' "$repo_dir") && git fetch $(printf '%q' "$vm_bundle") $(printf '%q' "+refs/heads/$branch:refs/remotes/host/rebased") && git reset --hard refs/remotes/host/rebased"
+    "cd $(printf '%q' "$repo_dir") && git fetch $(printf '%q' "$vm_bundle") $(printf '%q' "$sync_ref") && git reset --hard $(printf '%q' "$commit")"
 
   if ! $dry_run; then
-    [[ "$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)" == "$synced_commit" ]] ||
-      die "synchronized VM HEAD does not match the captured host commit"
-    update_state "$id" '.syncedCommit = $commit' --arg commit "$synced_commit"
+    [[ "$(sbx_call "$sbx" exec "$sandbox" -- git -C "$repo_dir" rev-parse HEAD)" == "$commit" ]] ||
+      die "synchronized VM HEAD does not match the requested commit"
+    update_state "$id" '.syncedCommit = $commit' --arg commit "$commit"
   fi
-  note "synced $synced_commit; run repository validation inside the VM"
+  note "synced $commit; run repository validation inside the VM"
 )

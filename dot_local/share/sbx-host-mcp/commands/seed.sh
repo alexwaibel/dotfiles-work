@@ -52,7 +52,7 @@ seed() {
     die "reuse-existing-branch must be true or false"
 
   local repo_path sbx base_branch sandbox branch repo_dir git_name git_email
-  local metadata_to_backup="" metadata_backup="" previous_worktree=""
+  local metadata_to_backup="" metadata_backup=""
   repo_path="$(canonical_repo "$repo")"
   sbx="$(find_sbx)"
   base_branch="$(discover_base_branch "$repo_path")"
@@ -77,7 +77,6 @@ seed() {
         die "existing metadata does not match the requested PR branch"
       sandbox_exists "$sbx" "$sandbox" &&
         die "sandbox already exists for work item $id"
-      previous_worktree="$(jq -r '.hostWorktree // empty' "$metadata")"
       metadata_to_backup="$metadata"
     else
       clear_stale_state "$id" "$sbx" "$sandbox"
@@ -191,7 +190,6 @@ seed() {
       --arg baseBranch "$base_branch" \
       --arg baseSha "$base_sha" \
       --arg repoDir "$repo_dir" \
-      --arg hostWorktree "$previous_worktree" \
       '{
         workItem: $id,
         slug: $slug,
@@ -201,9 +199,7 @@ seed() {
         baseBranch: $baseBranch,
         baseSha: $baseSha,
         repoDir: $repoDir
-      } + if $hostWorktree == "" then {} else {
-        hostWorktree: $hostWorktree
-      } end'
+      }'
   fi
   [[ -z "$metadata_backup" ]] || rm -f "$metadata_backup"
   seed_started=false

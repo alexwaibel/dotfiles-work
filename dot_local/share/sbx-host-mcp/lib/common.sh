@@ -87,14 +87,9 @@ inspect_work() {
       baseBranch,
       baseSha,
       repoDir,
-      hostWorktree,
       importedCommit,
       importedRef,
-      integratedCommit,
-      pendingIntegration,
-      exportedCommit,
-      syncedCommit,
-      patchPreserved
+      syncedCommit
     } | with_entries(select(.value != null))) + {
       sandboxStatus: $sandboxStatus
     }' "$file"
@@ -166,30 +161,6 @@ state_file() {
 validate_task_id() {
   [[ "$1" =~ ^task-[a-f0-9-]{36}$ ]] ||
     die "invalid task ID"
-}
-
-task_file() {
-  printf '%s/%s.json\n' "$tasks_root" "$1"
-}
-
-task_log_file() {
-  printf '%s/%s.log\n' "$tasks_root" "$1"
-}
-
-task_prompt_file() {
-  printf '%s/%s.prompt\n' "$tasks_root" "$1"
-}
-
-update_task() {
-  local task_id="$1"
-  local filter="$2"
-  shift 2
-  local file tmp
-  file="$(task_file "$task_id")"
-  [[ -f "$file" ]] || die "task metadata not found: $task_id"
-  tmp="${file}.tmp"
-  jq "$@" "$filter" "$file" >"$tmp"
-  mv "$tmp" "$file"
 }
 
 read_state() {

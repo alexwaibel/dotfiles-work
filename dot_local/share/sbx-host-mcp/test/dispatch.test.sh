@@ -14,22 +14,23 @@ cat >"${state_root}/131.json" <<'EOF'
 }
 EOF
 task_id="task-11111111-1111-1111-1111-111111111111"
-cat >"${state_root}/tasks/${task_id}.json" <<EOF
+request="$(cat <<EOF
 {
   "taskId": "$task_id",
   "workItem": 131,
-  "status": "queued"
+  "prompt": "Implement the bounded task."
 }
 EOF
-printf 'Implement the bounded task.' >"${state_root}/tasks/${task_id}.prompt"
+)"
 : >"${state_root}/tasks/${task_id}.log"
 SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_STATE_ROOT="$state_root" \
   SBX_WORK_SBX_BIN="$fake_sbx" \
-  bash "$script" dispatch 131 "$task_id"
+  bash "$(dirname "$(realpath "$script")")/run-task.sh" 131 "$task_id" <<<"$request"
 if [[ "$(jq -r '.status' "${state_root}/tasks/${task_id}.json")" == "completed" ]] &&
   grep -q 'agent completed task' "${state_root}/tasks/${task_id}.log" &&
-  [[ ! -e "${state_root}/tasks/${task_id}.prompt" ]]; then
+  ! jq -e 'has("prompt")' "${state_root}/tasks/${task_id}.json" >/dev/null &&
+  [[ ! -e "${state_root}/tasks/${task_id}.prompt" && ! -e "${state_root}/tasks/${task_id}.pid" ]]; then
   printf 'PASS: dispatch records task status and logs\n'
   pass=$((pass + 1))
 else

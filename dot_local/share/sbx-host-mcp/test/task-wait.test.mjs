@@ -35,7 +35,7 @@ async function replaceTask(path, task) {
 
 for (const status of ["completed", "failed", "canceled"]) {
   test(`wait observes atomic ${status} completion`, async t => {
-    const { manager, task, path, tasksRoot } = await fixture(t, "queued");
+    const { manager, task, path, tasksRoot } = await fixture(t);
     const waiting = manager.wait(taskId, 1000);
     await replaceTask(join(tasksRoot, "unrelated.json"), {
       ...task,
@@ -73,6 +73,7 @@ test("wait reports a runner that exited without recording completion", async t =
   assert.equal(result.task.status, "failed");
   assert.match(result.task.error, /without recording completion/);
   assert.equal(result.timedOut, false);
+  assert.equal(JSON.parse(await readFile(path, "utf8")).status, "running");
 });
 
 test("wait rejects missing task metadata", async t => {

@@ -8,7 +8,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { createHelperClient } from "./lib/helper-client.mjs";
-import { createSeedManager } from "./lib/seed-manager.mjs";
 import { createTaskManager } from "./lib/task-manager.mjs";
 
 const home = homedir();
@@ -69,7 +68,6 @@ const taskManager = createTaskManager({
   tasksRoot,
   runHelper: helperClient.run,
 });
-const seedManager = createSeedManager({ taskManager });
 
 const server = new McpServer({
   name: "sbx-host",
@@ -83,15 +81,13 @@ server.registerTool(
       "Read allowlisted transfer metadata and report whether the registered Docker Sandbox still exists.",
     inputSchema: {
       workItem: workItemSchema,
-      waitSeconds: z.number().int().min(0).max(120).default(0),
     },
   },
-  async ({ workItem, waitSeconds }) => {
+  async ({ workItem }) => {
     try {
-      const seed = await seedManager.wait(workItem, waitSeconds);
-      if (seed.state === "failed") return result(seed.error, true);
-      if (seed.state === "running") {
-        return result(JSON.stringify(seed.status, null, 2));
+      const seed = await taskManager.find(workItem, { kind: "seed" });
+      if (seed) {
+        return result(JSON.stringify(seed, null, 2));
       }
       return result(await helperClient.run(["inspect", String(workItem)]));
     } catch (error) {
@@ -117,7 +113,7 @@ server.registerTool(
       await validateCanonicalRepo(repo);
       return result(
         JSON.stringify(
-          await seedManager.start(workItem, slug, repo, reuseExistingBranch),
+          await taskManager.startSeed(workItem, slug, repo, reuseExistingBranch),
           null,
           2,
         ),
@@ -197,32 +193,39 @@ server.registerTool(
   },
 );
 
-for (const [name, description, command] of [
-  [
-    "export",
-    "Verify and import the exact committed sandbox branch using a Git bundle. Does not fetch origin, modify host worktrees, or rebase. Host integration is a separate sbx-work integrate operation.",
-    "export",
-  ],
-  [
-    "sync",
-    "Synchronize the reviewed clean host branch back into the existing sandbox clone.",
-    "sync",
-  ],
-]) {
-  server.registerTool(
-    name,
-    {
-      description,
-      inputSchema: { workItem: workItemSchema },
+server.registerTool(
+  "export",
+  {
+    description:
+      "Verify and import the exact committed sandbox branch using a Git bundle. Does not fetch origin, modify host worktrees, or integrate Git history.",
+    inputSchema: { workItem: workItemSchema },
+  },
+  async ({ workItem }) => {
+    try {
+      return result(await helperClient.run(["export", String(workItem)]));
+    } catch (error) {
+      return result(helperClient.formatError(error), true);
+    }
+  },
+);
+
+server.registerTool(
+  "sync",
+  {
+    description:
+      "Copy an explicit host commit into the clean sandbox checkout. Does not fetch origin or choose Git history.",
+    inputSchema: {
+      workItem: workItemSchema,
+      commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
     },
-    async ({ workItem }) => {
-      try {
-        return result(await helperClient.run([command, String(workItem)]));
-      } catch (error) {
-        return result(helperClient.formatError(error), true);
-      }
-    },
-  );
-}
+  },
+  async ({ workItem, commit }) => {
+    try {
+      return result(await helperClient.run(["sync", String(workItem), commit]));
+    } catch (error) {
+      return result(helperClient.formatError(error), true);
+    }
+  },
+);
 
 await server.connect(new StdioServerTransport());

@@ -146,7 +146,7 @@ SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_SBX_BIN="$fake_sbx" \
   bash "$script" seed 132 followup example-repo true >/dev/null
 if [[ "$(jq -r '.baseSha' "${state_root}/132.json")" == "$followup_sha" ]] &&
-  [[ "$(jq -r '.hostWorktree' "${state_root}/132.json")" == "/preserved/worktree" ]] &&
+  [[ "$(jq -r '.hostWorktree' "${state_root}/132.json")" == "null" ]] &&
   grep -q "bootstrap.sh /home/agent/workspace/example-repo $followup_branch $followup_sha Test User test@example.com true" "$fake_sbx_log"; then
   record_pass "follow-up seed reuses current remote PR branch"
 else
