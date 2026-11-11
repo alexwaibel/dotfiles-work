@@ -35,7 +35,7 @@ export async function createSbx({ env = process.env } = {}) {
     ...options, env: environment(options.variables),
   });
   return {
-    call,
+    call, hostPath,
     /** Execute an argument array inside a named VM. */
     exec: (sandbox, values, options) => call(["exec", sandbox, "--", ...values], options),
     /** Return a raw child process when the caller needs streaming control. */

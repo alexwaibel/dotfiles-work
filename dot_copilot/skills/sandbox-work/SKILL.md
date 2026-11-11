@@ -24,7 +24,15 @@ No work-item ID, prescribed branch, or publication workflow is required.
   process-scoped Azure Artifacts credentials and lifecycle scripts disabled.
   Runs in the foreground and returns `output` and `exitCode`.
 
-`create` makes a mountless Copilot VM without shared skills or external MCPs.
+`create` attaches the native kit at `~/.local/share/sbx-copilot-profile/`.
+Chezmoi renders it from the same portable instructions and model defaults used
+on the host, plus an allowlist of unchanged personal coding skills. Host hooks,
+MCP configuration, credentials, and host-only instructions are not included.
+The global Docker shared-skills store remains disabled.
+New VMs get a profile snapshot; existing VMs are not updated automatically.
+Keep task prompts about requirements rather than repeating these coding rules.
+
+`create` makes a mountless Copilot VM without external MCPs.
 No bridge operation fetches host Git, selects history, integrates changes, or
 publishes. Windows executable/path handling stays inside the bridge.
 

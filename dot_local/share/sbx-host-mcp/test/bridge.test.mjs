@@ -11,6 +11,8 @@ test("mountless VM primitives need no repository or workflow registration", asyn
   assert.match((await bridge.list()).output, /experiment/);
   const invocation = await log(paths);
   assert.match(invocation, /--static-mcp.*none.*--skills.*off/);
+  assert.ok(invocation.includes(JSON.stringify(paths.profile)));
+  assert.match(invocation, /"--kit"/);
   assert.doesNotMatch(invocation, /--clone/);
   const command = await bridge.exec({ sandbox: "experiment", cwd: paths.cwd("experiment"), script: 'printf "output\\n"; printf "failure detail\\n" >&2; exit 3' });
   assert.deepEqual(command, { exitCode: 3, output: "output\nfailure detail", stderr: "" });

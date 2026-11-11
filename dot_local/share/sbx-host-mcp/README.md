@@ -7,7 +7,8 @@ access.
 ## What it does
 
 - Creates, lists, stops, and removes VMs. New VMs have no host workspace mount,
-  shared skills, or external MCP access.
+  global shared-skills store, or external MCP access. A native kit seeds curated
+  skills, model defaults, and coding instructions from shared chezmoi sources.
 - Runs foreground commands inside a VM and returns their output and exit status.
   Backgrounding and log files are ordinary shell choices. Stop the VM to cancel work.
 - Copies individual files through a bounded host staging directory,

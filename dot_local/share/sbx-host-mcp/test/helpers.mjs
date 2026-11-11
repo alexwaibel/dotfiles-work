@@ -8,8 +8,14 @@ import { run } from "../lib/runtime.mjs";
 
 export async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "sbx-bridge-test-"));
-  const bin = join(root, "bin"), vms = join(root, "vms"), transfer = join(root, "transfer");
-  await Promise.all([bin, vms, transfer].map(path => mkdir(path)));
+  const bin = join(root, "bin"), vms = join(root, "vms"), transfer = join(root, "transfer"), profile = join(root, "profile");
+  await Promise.all([bin, vms, transfer, profile].map(path => mkdir(path)));
+  await writeFile(join(profile, "portable-copilot.yaml"), '# syntax=docker/sandbox-kit:3\n' + JSON.stringify({
+    schemaVersion: "3", kind: "mixin",
+    capabilities: [{ type: "com.docker.sandbox/lifecycle@1", config: {
+      files: [{ path: "/tmp/portable-profile-fixture", content: "installed" }],
+    } }],
+  }));
   const sbx = join(bin, "sbx");
   await writeFile(sbx, `#!/usr/bin/env node\nimport(${JSON.stringify(new URL("./fake-sbx.mjs", import.meta.url).href)}).catch(error => { console.error(error); process.exitCode = 1; });\n`, { mode: 0o700 });
   const auth = join(bin, "powershell");
@@ -23,7 +29,7 @@ await mkdir("node_modules",{recursive:true});
   const env = {
     ...process.env, PATH: `${bin}:${process.env.PATH}`,
     SBX_WORK_SBX_BIN: sbx, SBX_WORK_POWERSHELL_BIN: auth,
-    SBX_HOST_TRANSFER_ROOT: transfer, FAKE_SBX_ROOT: vms,
+    SBX_HOST_TRANSFER_ROOT: transfer, SBX_HOST_PROFILE_ROOT: profile, FAKE_SBX_ROOT: vms,
     FAKE_SBX_LOG: join(root, "sbx.log"),
   };
   const bridge = await createBridge({ env });
@@ -31,7 +37,7 @@ await mkdir("node_modules",{recursive:true});
     for (const sandbox of await readdir(vms)) await bridge.stop({ sandbox }).catch(() => {});
     await rm(root, { recursive: true, force: true });
   });
-  return { root, bin, vms, transfer, env, bridge, cwd: name => join(vms, name, "workspace") };
+  return { root, bin, vms, transfer, profile, env, bridge, cwd: name => join(vms, name, "workspace") };
 }
 
 export const git = (repo, ...args) => run("git", ["-C", repo, ...args]);

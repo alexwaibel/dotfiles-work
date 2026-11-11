@@ -25,6 +25,7 @@ test("native VM creation, repository setup, execution, retrieval and stop cancel
   await git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "Baseline");
   await git(repo, "bundle", "create", join(paths.transfer, "seed.bundle"), "HEAD");
   await bridge.create({ sandbox });
+  assert.equal(await sbx.exec(sandbox, ["cat", "/tmp/portable-profile-fixture"]), "installed");
   await bridge.copy({ sandbox, direction: "to", file: "seed.bundle", vmPath: "/tmp/seed.bundle" });
   const setup = await bridge.exec({ sandbox, cwd: "/tmp", script: 'git clone -q seed.bundle repo && git -C repo remote remove origin && test ! -e /run/sandbox/source' });
   assert.equal(setup.exitCode, 0);

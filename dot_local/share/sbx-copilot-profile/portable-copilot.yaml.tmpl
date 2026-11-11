@@ -1,0 +1,28 @@
+{{- $sandboxRole := `
+# Sandbox Role
+
+Work only in the assigned checkout. Read its repository instructions before editing.
+Keep external-system access, integration, and publishing on the host. Do not fetch
+or push Git remotes. Commit only when the task authorizes it. Never request or save
+host credentials; private package authentication belongs to the bridge's restore.
+` -}}
+{{- $instructions := printf "%s%s" (includeTemplate "copilot/portable-instructions.md" .) $sandboxRole -}}
+{{- $files := list
+  (dict "path" "/home/agent/.copilot/settings.json" "content" (.copilot.defaults | toPrettyJson) "mode" "0600")
+  (dict "path" "/home/agent/.copilot/copilot-instructions.md" "content" $instructions "mode" "0644")
+-}}
+{{- range $skill := .copilot.sandboxSkills -}}
+{{- $files = append $files (dict
+  "path" (printf "/home/agent/.copilot/skills/%s/SKILL.md" $skill)
+  "content" (include (printf "dot_copilot/skills/%s/SKILL.md" $skill))
+  "mode" "0644"
+) -}}
+{{- end -}}
+# syntax=docker/sandbox-kit:3
+{{ dict
+  "schemaVersion" "3"
+  "kind" "mixin"
+  "displayName" "Portable Copilot profile"
+  "capabilities" (list (dict "type" "com.docker.sandbox/lifecycle@1" "config" (dict "files" $files)))
+  | toYaml
+}}

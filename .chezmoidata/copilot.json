@@ -1,0 +1,16 @@
+{
+  "copilot": {
+    "defaults": {
+      "version": 1,
+      "model": "gpt-6.1-sol",
+      "effortLevel": "default",
+      "contextTier": "long_context"
+    },
+    "sandboxSkills": [
+      "bug-reproduction-brief",
+      "systematic-debugging",
+      "test-gap-audit",
+      "git-commit"
+    ]
+  }
+}

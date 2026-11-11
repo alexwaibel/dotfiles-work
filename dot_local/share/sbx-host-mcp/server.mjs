@@ -19,7 +19,7 @@ function register(name, description, inputSchema) {
   });
 }
 register("list", "List native Docker sandboxes. No workflow registration is required.", {});
-register("create", "Create and start a mountless Copilot VM, without shared skills or external MCP access.", { sandbox });
+register("create", "Create and start a mountless Copilot VM with its curated portable profile, without the global shared-skills store or external MCP access.", { sandbox });
 register("exec", "Run a foreground shell script inside a VM and return output and exitCode. For nonblocking work, explicitly background the command with redirected stdin/stdout/stderr and record its log, PID, and exit-code file.", {
   sandbox, script: z.string().min(1).max(64000), cwd: path,
 });

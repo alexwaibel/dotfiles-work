@@ -9,6 +9,7 @@ import { packageReadToken } from "./package-auth.mjs";
 export async function createBridge({ env = process.env } = {}) {
   const sbx = await createSbx({ env });
   const transferRoot = resolve(env.SBX_HOST_TRANSFER_ROOT || join(homedir(), "repos", ".sbx-transfer"));
+  const profileRoot = resolve(env.SBX_HOST_PROFILE_ROOT || join(homedir(), ".local", "share", "sbx-copilot-profile"));
   /** Validate and return a non-reserved sandbox name. */
   const name = value => {
     if (typeof value !== "string" || !/^[a-z0-9][a-z0-9.-]{1,62}$/.test(value) || value === "default") throw new Error("invalid sandbox name");
@@ -82,10 +83,11 @@ export async function createBridge({ env = process.env } = {}) {
   return {
     /** List native sandboxes without requiring workflow registrations. */
     list: async () => ({ output: await sbx.call(["ls"]) }),
-    /** Create and start a mountless VM without shared skills or external MCPs. */
+    /** Create a mountless VM with the portable profile, not host MCPs or shared skills. */
     async create({ sandbox }) {
       name(sandbox);
-      await sbx.call(["create", "--name", sandbox, "--static-mcp", "none", "--skills", "off", "copilot"]);
+      await sbx.call(["create", "--name", sandbox, "--static-mcp", "none", "--skills", "off",
+        "--kit", await sbx.hostPath(profileRoot), "copilot"]);
       await sbx.call(["run", "-d", "--name", sandbox]);
       return { sandbox };
     },
