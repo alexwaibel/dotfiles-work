@@ -1,187 +1,34 @@
 #!/usr/bin/env node
-
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { configuration, formatError } from "./lib/runtime.mjs";
-import { createSandbox } from "./lib/sandbox.mjs";
-import { createTaskManager } from "./lib/tasks.mjs";
+import { createBridge } from "./lib/bridge.mjs";
 
-const config = configuration();
-const sandbox = createSandbox(config);
-
-const workItemSchema = z.number().int().positive();
-const slugSchema = z
-  .string()
-  .regex(/^[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?$/);
-const repoSchema = z.string().regex(/^[A-Za-z0-9._-]+$/);
-const taskIdSchema = z.string().regex(/^task-[a-f0-9-]{36}$/);
-
-function result(text, isError = false) {
-  return {
-    content: [{ type: "text", text }],
-    ...(isError ? { isError: true } : {}),
-  };
+const bridge = await createBridge();
+const server = new McpServer({ name: "sbx-host", version: "3.0.0" });
+const sandbox = z.string().regex(/^[a-z0-9][a-z0-9.-]{1,62}$/);
+const path = z.string().min(1).max(4096);
+/** Expose a bridge operation with JSON responses and MCP error reporting. */
+function register(name, description, inputSchema) {
+  server.registerTool(name, { description, inputSchema }, async input => {
+    try {
+      return { content: [{ type: "text", text: JSON.stringify(await bridge[name](input)) }] };
+    } catch (error) {
+      return { content: [{ type: "text", text: error.message }], isError: true };
+    }
+  });
 }
-
-const taskManager = createTaskManager(config);
-
-const server = new McpServer({
-  name: "sbx-host",
-  version: "1.0.0",
+register("list", "List native Docker sandboxes. No workflow registration is required.", {});
+register("create", "Create and start a mountless Copilot VM, without shared skills or external MCP access.", { sandbox });
+register("exec", "Run a foreground shell script inside a VM and return output and exitCode. For nonblocking work, explicitly background the command with redirected stdin/stdout/stderr and record its log, PID, and exit-code file.", {
+  sandbox, script: z.string().min(1).max(64000), cwd: path,
 });
-
-server.registerTool(
-  "inspect",
-  {
-    description:
-      "Read allowlisted transfer metadata and report whether the registered Docker Sandbox still exists.",
-    inputSchema: {
-      workItem: workItemSchema,
-    },
-  },
-  async ({ workItem }) => {
-    try {
-      const seed = await taskManager.find(workItem, { kind: "seed" });
-      if (seed) {
-        return result(JSON.stringify(seed, null, 2));
-      }
-      return result(JSON.stringify(await sandbox.inspect(workItem), null, 2));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "seed",
-  {
-    description:
-      "Start a persisted seed job that creates a mountless Docker Sandbox from committed Git objects and restores detected Azure Artifacts dependencies. Returns a taskId for task-wait, task_status, or task_logs.",
-    inputSchema: {
-      workItem: workItemSchema,
-      slug: slugSchema,
-      repo: repoSchema,
-      reuseExistingBranch: z.boolean().default(false),
-    },
-  },
-  async ({ workItem, slug, repo, reuseExistingBranch }) => {
-    try {
-      return result(
-        JSON.stringify(
-          await taskManager.startSeed(workItem, slug, repo, reuseExistingBranch),
-          null,
-          2,
-        ),
-      );
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "dispatch",
-  {
-    description:
-      "Start one noninteractive Copilot task inside an existing work-item sandbox.",
-    inputSchema: {
-      workItem: workItemSchema,
-      prompt: z.string().min(1).max(32000),
-    },
-  },
-  async ({ workItem, prompt }) => {
-    try {
-      return result(
-        JSON.stringify(await taskManager.dispatch(workItem, prompt), null, 2),
-      );
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "task_status",
-  {
-    description: "Read persisted status for one seed or Copilot task.",
-    inputSchema: { taskId: taskIdSchema },
-  },
-  async ({ taskId }) => {
-    try {
-      return result(JSON.stringify(await taskManager.read(taskId), null, 2));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "task_logs",
-  {
-    description: "Read the tail of one seed or Copilot task log.",
-    inputSchema: {
-      taskId: taskIdSchema,
-      tailBytes: z.number().int().min(1024).max(32768).default(16384),
-    },
-  },
-  async ({ taskId, tailBytes }) => {
-    try {
-      return result(await taskManager.logs(taskId, tailBytes));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "cancel",
-  {
-    description: "Signal a running task inside its VM and confirm its process group has stopped.",
-    inputSchema: { taskId: taskIdSchema },
-  },
-  async ({ taskId }) => {
-    try {
-      return result(JSON.stringify(await taskManager.cancel(taskId), null, 2));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "export",
-  {
-    description:
-      "Verify and import the exact committed sandbox branch using a Git bundle. Does not fetch origin, modify host worktrees, or integrate Git history.",
-    inputSchema: { workItem: workItemSchema },
-  },
-  async ({ workItem }) => {
-    try {
-      return result(JSON.stringify(await taskManager.export(workItem), null, 2));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
-server.registerTool(
-  "sync",
-  {
-    description:
-      "Copy an explicit host commit into the clean sandbox checkout. Does not fetch origin or choose Git history.",
-    inputSchema: {
-      workItem: workItemSchema,
-      commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
-    },
-  },
-  async ({ workItem, commit }) => {
-    try {
-      return result(JSON.stringify(await taskManager.sync(workItem, commit), null, 2));
-    } catch (error) {
-      return result(formatError(error), true);
-    }
-  },
-);
-
+register("copy", "Copy one regular file to/from a VM. Host files are restricted to ~/repos/.sbx-transfer (or SBX_HOST_TRANSFER_ROOT). Uploads use a staged filename; downloads create a new filename and never overwrite host files.", {
+  sandbox, direction: z.enum(["to", "from"]), vmPath: path, file: z.string().min(1).max(200).optional(),
+});
+register("restore", "Run a foreground Yarn/npm/pnpm restore with an Azure Artifacts package-read token and lifecycle scripts disabled. Returns output and exitCode; credentials are passed only through the process environment.", {
+  sandbox, cwd: path, organization: z.string().regex(/^[A-Za-z0-9._-]+$/),
+});
+register("stop", "Stop a named VM, including its running commands. Repository files remain.", { sandbox });
+register("remove", "Remove a named VM and its contents. Retrieve needed results first.", { sandbox });
 await server.connect(new StdioServerTransport());

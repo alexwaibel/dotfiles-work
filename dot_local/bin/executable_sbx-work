@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-exec node "$HOME/.local/share/sbx-host-mcp/cli.mjs" "$@"

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# package-lock hash: {{ include "dot_local/share/host-attachments-mcp/package-lock.json" | sha256sum }}
+
+set -euo pipefail
+
+npm ci \
+  --prefix "${HOME}/.local/share/host-attachments-mcp" \
+  --ignore-scripts \
+  --no-audit \
+  --no-fund \
+  --registry=https://registry.npmjs.org

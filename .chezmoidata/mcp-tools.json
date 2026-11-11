@@ -376,26 +376,24 @@
     },
     "sbx-host": {
       "all": [
-        "cancel",
-        "dispatch",
-        "export",
-        "inspect",
-        "seed",
-        "sync",
-        "task_logs",
-        "task_status"
+        "copy",
+        "create",
+        "exec",
+        "list",
+        "remove",
+        "restore",
+        "stop"
       ],
       "safe": [
-        "cancel",
-        "dispatch",
-        "inspect",
-        "task_logs",
-        "task_status"
+        "list"
       ],
       "highRisk": {
-        "export": "Creates or updates a host worktree and rebases an agent branch.",
-        "seed": "Creates a Docker Sandbox VM, task branch, and detected private dependency restore.",
-        "sync": "Resets the VM clone to a reviewed host branch for exceptional follow-up work."
+        "copy": "Transfers files between a VM and the bounded host staging directory.",
+        "create": "Creates and starts a Docker Sandbox VM.",
+        "exec": "Executes arbitrary shell commands inside a VM.",
+        "remove": "Deletes a VM and its contents.",
+        "restore": "Acquires a package-read credential and executes a constrained dependency restore inside a VM.",
+        "stop": "Stops a VM and interrupts its running commands."
       }
     },
     "host-attachments": {

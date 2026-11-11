@@ -89,19 +89,21 @@ python3 dot_copilot/skills/audit-mcp-tools/scripts/audit.py \
 section "Copilot hooks"
 bash dot_copilot/hooks/guard-safe-shell.test.sh
 
-section "sbx-host MCP"
-cp -a dot_local/share/sbx-host-mcp "${tmp_dir}/sbx-host-mcp"
-npm ci \
-  --prefix "${tmp_dir}/sbx-host-mcp" \
-  --ignore-scripts \
-  --no-audit \
-  --no-fund \
-  --registry=https://registry.npmjs.org
-npm test --prefix "${tmp_dir}/sbx-host-mcp"
-npm audit \
-  --omit=dev \
-  --audit-level=high \
-  --registry=https://registry.npmjs.org \
-  --prefix "${tmp_dir}/sbx-host-mcp"
+for package in sbx-host-mcp host-attachments-mcp; do
+  section "${package}"
+  cp -a "dot_local/share/${package}" "${tmp_dir}/${package}"
+  npm ci \
+    --prefix "${tmp_dir}/${package}" \
+    --ignore-scripts \
+    --no-audit \
+    --no-fund \
+    --registry=https://registry.npmjs.org
+  npm test --prefix "${tmp_dir}/${package}"
+  npm audit \
+    --omit=dev \
+    --audit-level=high \
+    --registry=https://registry.npmjs.org \
+    --prefix "${tmp_dir}/${package}"
+done
 
 printf '\nAll dotfiles checks passed.\n'

@@ -1,46 +1,47 @@
 import assert from "node:assert/strict";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { test } from "node:test";
-import { createSandbox } from "../lib/sandbox.mjs";
+import { createBridge } from "../lib/bridge.mjs";
 import { createSbx } from "../lib/sbx.mjs";
-import { createTaskManager } from "../lib/tasks.mjs";
-import { git } from "../lib/runtime.mjs";
-import { commit, fixture, waitForLog } from "./helpers.mjs";
+import { fixture, git } from "./helpers.mjs";
 
-test("native mountless seed, exact transfers, and confirmed remote process-group cancellation", {
+test("native VM creation, repository setup, execution, retrieval and stop cancellation", {
   skip: process.env.SBX_HOST_LIVE_TEST !== "1", timeout: 180000,
 }, async t => {
   const paths = await fixture(t);
-  paths.env.PATH = process.env.PATH;
-  delete paths.env.SBX_WORK_SBX_BIN;
-  if (process.env.SBX_HOST_LIVE_BIN) paths.env.SBX_WORK_SBX_BIN = process.env.SBX_HOST_LIVE_BIN;
-  const sbx = await createSbx(paths.config);
-  const tasks = createTaskManager(paths.config);
-  const id = 9000000000000 + process.pid;
-  const name = `wi-${id}-vm`;
-  t.after(() => sbx.call(["rm", "--force", name]));
-  const started = await tasks.startSeed(id, "bridge-smoke", "example-repo", false);
-  const result = await tasks.wait(started.taskId, 120000);
-  assert.equal(result.task.status, "completed", await tasks.logs(started.taskId));
-  const state = await createSandbox(paths.config).inspect(id);
-  assert.equal(await sbx.exec(name, ["git", "-C", state.repoDir, "rev-parse", "HEAD"]), state.baseSha);
-  assert.equal(await sbx.exec(name, ["git", "-C", state.repoDir, "remote", "-v"]), "");
-  await sbx.exec(name, ["test", "!", "-e", "/run/sandbox/source"]);
-  await sbx.exec(name, ["bash", "-c",
-    'cd "$1"; printf "VM change\\n" > live.txt; git add live.txt; git -c commit.gpgsign=false commit -qm "Live transfer fixture"',
-    "bash", state.repoDir]);
-  const exported = await tasks.export(id);
-  assert.equal(await git(paths.repo, "rev-parse", exported.importedRef), exported.importedCommit);
-  const followup = await commit(paths.repo, "host-followup.txt");
-  assert.deepEqual(await tasks.sync(id, followup), { syncedCommit: followup });
-  assert.equal(await sbx.exec(name, ["git", "-C", state.repoDir, "rev-parse", "HEAD"]), followup);
-  await sbx.call(["exec", "-i", name, "--", "bash", "-c",
-    'mkdir -p "$HOME/.local/bin"; cat > "$HOME/.local/bin/copilot"; chmod 700 "$HOME/.local/bin/copilot"',
-  ], { input: '#!/bin/bash\ntrap "" TERM\nsleep 120 &\necho "agent-child=$!"\nwait "$!"\n' });
-  const running = await tasks.dispatch(id, "Deterministic cancellation fixture");
-  const [, child] = await waitForLog(paths, running.taskId, /agent-child=(\d+)/, 30000);
-  assert.equal((await tasks.cancel(running.taskId)).status, "canceled");
-  const childState = await sbx.exec(name, ["bash", "-c",
-    'if test -r "/proc/$1/stat"; then stat="$(cat "/proc/$1/stat")"; read -r state _ <<<"${stat##*) }"; printf "%s" "$state"; else printf gone; fi',
-    "bash", child]);
-  assert.match(childState, /^(gone|Z)$/);
+  const env = { ...paths.env, PATH: process.env.PATH };
+  delete env.SBX_WORK_SBX_BIN;
+  const bridge = await createBridge({ env }), sbx = await createSbx({ env });
+  const sandbox = `sbx-primitive-smoke-${process.pid}`;
+  t.after(() => bridge.remove({ sandbox }));
+  const repo = join(paths.root, "repo");
+  await mkdir(repo);
+  await git(repo, "init", "-q");
+  await git(repo, "config", "user.name", "Test");
+  await git(repo, "config", "user.email", "test@example.com");
+  await writeFile(join(repo, "baseline"), "baseline");
+  await git(repo, "add", ".");
+  await git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "Baseline");
+  await git(repo, "bundle", "create", join(paths.transfer, "seed.bundle"), "HEAD");
+  await bridge.create({ sandbox });
+  await bridge.copy({ sandbox, direction: "to", file: "seed.bundle", vmPath: "/tmp/seed.bundle" });
+  const setup = await bridge.exec({ sandbox, cwd: "/tmp", script: 'git clone -q seed.bundle repo && git -C repo remote remove origin && test ! -e /run/sandbox/source' });
+  assert.equal(setup.exitCode, 0);
+  const work = await bridge.exec({ sandbox, cwd: "/tmp/repo", script: 'printf result > result.txt; git diff --no-index /dev/null result.txt > /tmp/result.patch; test -s /tmp/result.patch' });
+  assert.equal(work.exitCode, 0);
+  assert.equal(await sbx.exec(sandbox, ["git", "-C", "/tmp/repo", "remote", "-v"]), "");
+  assert.match(await sbx.exec(sandbox, ["copilot", "--version"]), /Copilot CLI/);
+  const downloaded = await bridge.copy({ sandbox, direction: "from", vmPath: "/tmp/result.patch" });
+  assert.match(await readFile(downloaded.path, "utf8"), /\+result/);
+  const background = await bridge.exec({ sandbox, cwd: "/tmp/repo", script: 'nohup bash -c \'sleep 1; printf done > /tmp/background.log; printf "0\\n" > /tmp/background.exit\' > /tmp/background.output 2>&1 < /dev/null & echo $!' });
+  assert.equal(background.exitCode, 0);
+  assert.match(background.output, /^[1-9][0-9]*$/);
+  const outcome = await bridge.exec({ sandbox, cwd: "/tmp/repo", script: 'timeout 5 bash -c \'until test -f /tmp/background.exit; do sleep .1; done\' && cat /tmp/background.exit /tmp/background.log' });
+  assert.deepEqual(outcome, { exitCode: 0, output: "0\ndone" });
+  const running = await bridge.exec({ sandbox, cwd: "/tmp/repo", script: 'nohup sleep 120 > /tmp/sleep.log 2>&1 < /dev/null & echo $!' });
+  assert.equal(running.exitCode, 0);
+  assert.equal(await sbx.exec(sandbox, ["kill", "-0", running.output]), "");
+  await bridge.stop({ sandbox });
+  assert.match((await bridge.list()).output, new RegExp(`${sandbox}[^\\n]*stopped`));
 });
