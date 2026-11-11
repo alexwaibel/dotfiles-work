@@ -1,61 +1,40 @@
-export function createSeedManager({ runHelper, formatError }) {
-  const jobs = new Map();
-
+export function createSeedManager({ taskManager }) {
   function status(job) {
     return {
+      taskId: job.taskId,
       workItem: job.workItem,
-      sandbox: `wi-${job.workItem}-vm`,
-      seedStatus: job.status,
-      startedAt: job.startedAt,
+      sandbox: job.sandbox,
+      seedStatus: ["queued", "running"].includes(job.status)
+        ? "running"
+        : job.status,
+      startedAt: job.startedAt || job.createdAt,
     };
   }
 
-  function start(workItem, slug, repo, reuseExistingBranch) {
-    const existing = jobs.get(workItem);
-    if (existing?.status === "running") return status(existing);
-
-    const job = {
-      workItem,
-      status: "running",
-      startedAt: new Date().toISOString(),
-      promise: undefined,
-      error: undefined,
-    };
-    job.promise = runHelper([
-      "seed",
-      String(workItem),
-      slug,
-      repo,
-      String(reuseExistingBranch),
-    ])
-      .then(() => {
-        job.status = "succeeded";
-      })
-      .catch(error => {
-        job.status = "failed";
-        job.error = formatError(error);
-      });
-    jobs.set(workItem, job);
-    return status(job);
+  async function start(workItem, slug, repo, reuseExistingBranch) {
+    return status(
+      await taskManager.startSeed(workItem, slug, repo, reuseExistingBranch),
+    );
   }
 
   async function wait(workItem, waitSeconds) {
-    const job = jobs.get(workItem);
+    let job = await taskManager.find(workItem, { kind: "seed" });
     if (!job) return { state: "absent" };
-    if (job.status === "running" && waitSeconds > 0) {
-      await Promise.race([
-        job.promise,
-        new Promise(resolve => setTimeout(resolve, waitSeconds * 1000)),
-      ]);
+    if (["queued", "running"].includes(job.status) && waitSeconds > 0) {
+      ({ task: job } = await taskManager.wait(job.taskId, waitSeconds * 1000));
     }
-    if (job.status === "failed") {
-      jobs.delete(workItem);
-      return { state: "failed", error: job.error || "Sandbox seed failed" };
+    if (["failed", "canceled"].includes(job.status)) {
+      return {
+        state: "failed",
+        error:
+          job.error ||
+          await taskManager.logs(job.taskId, 16384) ||
+          "Sandbox seed failed",
+      };
     }
-    if (job.status === "running") {
+    if (["queued", "running"].includes(job.status)) {
       return { state: "running", status: status(job) };
     }
-    jobs.delete(workItem);
     return { state: "completed" };
   }
 

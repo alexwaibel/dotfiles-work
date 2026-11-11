@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { once } from "node:events";
+import { readFile, rm } from "node:fs/promises";
 import { test } from "node:test";
 import {
   fixture,
@@ -154,4 +155,46 @@ test("failed helper output is bounded", async t => {
   assert.equal(response.result.isError, true);
   assert.match(text, /output truncated/);
   assert.ok(text.length < 34 * 1024);
+});
+
+test("seed runner survives an MCP server restart", async t => {
+  const paths = await fixture();
+  const first = startServer(paths);
+  t.after(() => first.kill());
+  await initialize(first);
+  send(first, {
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: {
+      name: "seed",
+      arguments: { workItem: 123, slug: "slow-seed", repo: "example-repo" },
+    },
+  });
+  const started = await readMessage(first);
+  const { taskId } = JSON.parse(started.result.content[0].text);
+  assert.match(taskId, /^task-[a-f0-9-]{36}$/);
+  const stopped = once(first, "exit");
+  first.kill();
+  await stopped;
+
+  const restarted = startServer(paths);
+  t.after(() => restarted.kill());
+  await initialize(restarted);
+  send(restarted, {
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: { name: "inspect", arguments: { workItem: 123, waitSeconds: 3 } },
+  });
+  const inspected = await readMessage(restarted);
+  assert.equal(inspected.result.isError, undefined);
+  assert.match(inspected.result.content[0].text, /"sandboxStatus":"present"/);
+  send(restarted, {
+    jsonrpc: "2.0", id: 3, method: "tools/call",
+    params: { name: "task_status", arguments: { taskId } },
+  });
+  const status = await readMessage(restarted);
+  assert.equal(JSON.parse(status.result.content[0].text).status, "completed");
+  const log = await readFile(paths.helperLog, "utf8");
+  assert.equal(
+    log.split("\n").filter(line => line.startsWith("seed 123 ")).length, 1,
+  );
+  await rm(paths.root, { recursive: true, force: true });
 });

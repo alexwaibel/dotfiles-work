@@ -17,6 +17,11 @@ The host session owns:
 - browser reproduction and external MCP tools
 - review of imported commits
 
+The `sbx` adapter alone handles Windows executable discovery, host-path
+conversion, environment forwarding, and native-clone compatibility. A separate
+package credential provider handles Windows AzureAuth. Transfer, worktrees,
+rebasing, and publishing use Linux Git, never Windows Git.
+
 The VM owns:
 
 - repository exploration
@@ -52,9 +57,10 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
    - Seed automatically restores dependencies when the canonical repository
      declares a supported package manager and configures an Azure Artifacts
      registry.
-     Seed returns immediately; call `sbx-host.inspect` with `waitSeconds: 60`
-     until it reports `sandboxStatus: present`. Do not use shell sleeps or start
-     another seed while `seedStatus` is `running`.
+     Seed returns immediately with a persisted `taskId`. Use the one-shot
+     `sbx-work task-wait <task-id>` procedure in step 5, then call
+     `sbx-host.inspect` once to verify readiness. Do not start another seed
+     while the existing seed job is active.
 4. Build a bounded implementation prompt containing the work-item requirements,
    VM repository path and branch, repository-instruction requirement, validation
    expectations, commit trailers, and the prohibition on push/PR/external
@@ -97,8 +103,16 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
    - commit without push or PR
 10. Keep browser reproduction and live network inspection on the host.
 11. When the VM has a clean committed change:
-    - Call `sbx-host.export`.
-    - Confirm export reports that the rebased commit preserved the VM patch.
+    - Call `sbx-host.export`. It creates a VM Git bundle, copies it through
+      `sbx`, verifies prerequisites and the exact branch/HEAD, and imports into
+      a dedicated immutable ref using Linux Git. It does not fetch origin,
+      alter a host worktree, or rebase.
+    - Confirm `importedCommit` matches VM HEAD.
+    - Separately run `sbx-work integrate <work-item>` on the host when ready
+      to integrate. This fetches origin, prepares the standard worktree,
+      rebases, and checks aggregate patch equality. Conflicts preserve pending
+      provenance for recovery; finish the rebase and rerun integration to
+      verify it. Do not automatically publish after import alone.
 12. Review the host worktree diff against the work item. If the rebase was
     clean, the patch was preserved, and no host edits are needed:
     - Push only the expected `users/alwaibel/agent/<id>-<slug>` branch.
@@ -126,13 +140,16 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
 ## Recovery
 
 - Transfer metadata is stored under `~/.local/state/sbx-work/`.
-- Dispatched task metadata and logs are stored under
+- Seed and Copilot job metadata, PIDs, and logs are stored under
   `~/.local/state/sbx-work/tasks/`.
+  Both use the same event-driven waiter and survive MCP server restarts.
 - A reboot or daemon restart should not require recreating the sandbox.
 - Interactive `sbx run --name wi-<work-item>-vm` remains a manual diagnostic
   fallback, not the normal implementation path.
-- Seed is atomic: an incomplete new sandbox is removed and no metadata is
-  retained. Retry seed after correcting the reported failure.
+- Seed is atomic for ordinary failures: incomplete new sandboxes and transfer
+  metadata are removed; the failed job record and logs remain for diagnosis.
+  Correct the failure before explicitly retrying. Do not cancel a seed through
+  the Copilot-task cancellation operation; lifecycle recovery stays native.
 - If Copilot reports expired or unauthorized credentials, ask the user to run:
 
   ```powershell
@@ -148,17 +165,19 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
   ```
 
   If `gh auth status` fails, run `gh auth login --hostname github.com` first.
-- If export or synchronization fails, keep both the VM and host worktree. Do not
-  delete state or bypass bundle verification.
+- If import, integration, or synchronization fails, keep the VM, imported refs,
+  and host worktree. Do not delete state or bypass bundle/patch verification.
 - Before running `sbx rm`, confirm the VM is clean and its HEAD matches the
-  exported or synchronized host commit.
+  exact imported or synchronized commit, not merely a rebased host HEAD.
 
 ## Repository behavior
 
 The `sbx-host` MCP server is the constrained host bridge. It exposes only
 seed/inspection, bounded Copilot dispatch/status/logs/cancel, export, and
 exceptional sync. It does not expose arbitrary host commands or paths.
-Native clone mode provides the private VM repository and managed host fetch
-remote; a narrow Windows Git compatibility shim works around Docker v0.51
+Both transfer directions use Git bundles and `sbx cp`. The import ref preserves
+the exact VM SHA independently of host integration. Native clone mode provides
+the private VM repository; its Docker-internal Windows Git still requires a
+narrow compatibility shim for Docker v0.51
 passing an invalid empty `core.hooksPath` to Git 2.56. Lifecycle, policy,
 diagnostics, and removal remain native `sbx` operations.

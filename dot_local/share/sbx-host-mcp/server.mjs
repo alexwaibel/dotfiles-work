@@ -51,18 +51,25 @@ async function validateCanonicalRepo(repo) {
   }
 }
 
-const helperClient = createHelperClient({ helper, home });
-const seedManager = createSeedManager({
-  runHelper: helperClient.run,
-  formatError: helperClient.formatError,
+const helperClient = createHelperClient({
+  helper,
+  home,
+  env: {
+    ...process.env,
+    SBX_WORK_REPOS_ROOT: reposRoot,
+    SBX_WORK_STATE_ROOT: stateRoot,
+    SBX_WORK_TASKS_ROOT: tasksRoot,
+  },
 });
 const taskManager = createTaskManager({
   helper,
   home,
+  reposRoot,
   stateRoot,
   tasksRoot,
   runHelper: helperClient.run,
 });
+const seedManager = createSeedManager({ taskManager });
 
 const server = new McpServer({
   name: "sbx-host",
@@ -97,7 +104,7 @@ server.registerTool(
   "seed",
   {
     description:
-      "Create a constrained native clone-mode Docker Sandbox and pre-restore detected Azure Artifacts dependencies before agent startup.",
+      "Start a persisted seed job that creates a native clone-mode Docker Sandbox and restores detected Azure Artifacts dependencies. Returns a taskId for task-wait, task_status, or task_logs.",
     inputSchema: {
       workItem: workItemSchema,
       slug: slugSchema,
@@ -110,7 +117,7 @@ server.registerTool(
       await validateCanonicalRepo(repo);
       return result(
         JSON.stringify(
-          seedManager.start(workItem, slug, repo, reuseExistingBranch),
+          await seedManager.start(workItem, slug, repo, reuseExistingBranch),
           null,
           2,
         ),
@@ -145,7 +152,7 @@ server.registerTool(
 server.registerTool(
   "task_status",
   {
-    description: "Read persisted status for one dispatched sandbox task.",
+    description: "Read persisted status for one seed or Copilot task.",
     inputSchema: { taskId: taskIdSchema },
   },
   async ({ taskId }) => {
@@ -160,7 +167,7 @@ server.registerTool(
 server.registerTool(
   "task_logs",
   {
-    description: "Read the tail of one dispatched sandbox task log.",
+    description: "Read the tail of one seed or Copilot task log.",
     inputSchema: {
       taskId: taskIdSchema,
       tailBytes: z.number().int().min(1024).max(32768).default(16384),
@@ -193,7 +200,7 @@ server.registerTool(
 for (const [name, description, command] of [
   [
     "export",
-    "Export a clean committed sandbox branch to a standard host worktree and rebase it on the latest remote base.",
+    "Verify and import the exact committed sandbox branch using a Git bundle. Does not fetch origin, modify host worktrees, or rebase. Host integration is a separate sbx-work integrate operation.",
     "export",
   ],
   [

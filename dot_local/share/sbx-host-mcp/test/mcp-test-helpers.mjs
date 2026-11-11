@@ -33,23 +33,35 @@ if [[ "$1" == "inspect" ]]; then
   printf '{"workItem":"123","sandbox":"wi-123-vm","repoDir":"/home/agent/workspace/example-repo","sandboxStatus":"present"}\n'
   exit 0
 fi
-if [[ "$1" == "dispatch" ]]; then
+if [[ "$1" == "dispatch" || "$1" == "run-job" ]]; then
   task="$SBX_WORK_STATE_ROOT/tasks/$3.json"
   log="$SBX_WORK_STATE_ROOT/tasks/$3.log"
   prompt="$SBX_WORK_STATE_ROOT/tasks/$3.prompt"
   tmp="$task.tmp"
-  if grep -q '^WAIT_QUEUED' "$prompt"; then
+  if [[ -f "$prompt" ]] && grep -q '^WAIT_QUEUED' "$prompt"; then
     sleep 5
   fi
   jq '.status = "running" | .runnerPid = $pid' --argjson pid "$$" "$task" >"$tmp"
   mv "$tmp" "$task"
-  printf 'agent completed task\n' >"$log"
-  jq '.status = "completed" | .exitCode = 0' "$task" >"$tmp"
+  code=0
+  if [[ "$(jq -r '.kind' "$task")" == "seed" ]]; then
+    bash "$0" seed "$2" "$(jq -r '.seed.slug' "$task")" \
+      "$(jq -r '.seed.repo' "$task")" \
+      "$(jq -r '.seed.reuseExistingBranch' "$task")" >"$log" 2>&1
+    code=$?
+  else
+    printf 'agent completed task\n' >"$log"
+  fi
+  jq '.status = (if $code == 0 then "completed" else "failed" end) | .exitCode = $code' --argjson code "$code" "$task" >"$tmp"
   mv "$tmp" "$task"
   exit 0
 fi
 if [[ "$1" == "seed" && "$3" == "slow-seed" ]]; then
   sleep 1
+fi
+if [[ "$1" == "seed" && "$3" == "failed-seed" ]]; then
+  printf 'fixture seed failed\n' >&2
+  exit 7
 fi
 printf 'helper: %s\\n' "$*"
 `,

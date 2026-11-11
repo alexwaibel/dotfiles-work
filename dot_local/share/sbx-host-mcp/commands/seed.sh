@@ -40,41 +40,6 @@ detect_install_command() {
   esac
 }
 
-ado_organization() {
-  local repo_path="$1"
-  if [[ -n "${SBX_WORK_ADO_ORGANIZATION:-}" ]]; then
-    [[ "$SBX_WORK_ADO_ORGANIZATION" =~ ^[A-Za-z0-9._-]+$ ]] ||
-      die "invalid SBX_WORK_ADO_ORGANIZATION"
-    printf '%s\n' "$SBX_WORK_ADO_ORGANIZATION"
-    return
-  fi
-  local remote
-  remote="$(git -C "$repo_path" remote get-url origin)"
-  if [[ "$remote" =~ ^https://([^.]+)\.visualstudio\.com/ ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-    return
-  fi
-  if [[ "$remote" =~ ^https://dev\.azure\.com/([^/]+)/ ]]; then
-    printf '%s\n' "${BASH_REMATCH[1]}"
-    return
-  fi
-  die "cannot derive Azure DevOps organization from origin: $remote"
-}
-
-windows_ado_pat() {
-  local organization="$1"
-  local id="$2"
-  local powershell_bin="${SBX_WORK_POWERSHELL_BIN:-powershell.exe}"
-  [[ "$organization" =~ ^[A-Za-z0-9._-]+$ ]] ||
-    die "invalid Azure DevOps organization: $organization"
-  command -v "$powershell_bin" >/dev/null 2>&1 ||
-    die "powershell.exe is required for Windows-host Azure authentication"
-
-  "$powershell_bin" -NoProfile -Command \
-    "azureauth ado pat --organization '$organization' --display-name 'DockerSandbox-wi-$id' --scope vso.packaging --output token --prompt-hint 'DockerSandbox-wi-$id' --timeout 30" |
-    tr -d '\r'
-}
-
 seed() {
   local id="$1"
   local slug="$2"
@@ -125,9 +90,7 @@ seed() {
   fi
 
   ensure_canonical_ready "$repo_path" "$base_branch"
-  if [[ "$sbx" == *.exe ]]; then
-    ensure_windows_safe_directory "$repo_path"
-  fi
+  run sbx_prepare_clone "$sbx" "$repo_path"
   note "refreshing ${repo}/${base_branch}"
   run git -C "$repo_path" fetch origin
   run git -C "$repo_path" merge --ff-only "origin/$base_branch"
@@ -183,7 +146,7 @@ seed() {
     --static-mcp none \
     --skills off \
     copilot \
-    "$(win_path "$repo_path")"
+    "$(sbx_host_path "$sbx" "$repo_path")"
   seed_step run sbx_call "$sbx" run -d --name "$sandbox"
   if $dry_run; then
     run sbx_call "$sbx" exec "$sandbox" -- pwd
@@ -203,37 +166,11 @@ seed() {
     cleanup_incomplete_seed
     die "sandbox clone returned an invalid workspace path"
   }
-  local checkout_command
-  if [[ "$reuse_existing_branch" == "true" ]]; then
-    checkout_command="git -C $(printf '%q' "$repo_dir") checkout -B $(printf '%q' "$branch") $(printf '%q' "$base_sha")"
-  else
-    checkout_command="git -C $(printf '%q' "$repo_dir") checkout -b $(printf '%q' "$branch")"
-  fi
-  seed_step sbx_exec_shell "$sbx" "$sandbox" \
-    "$checkout_command && git -C $(printf '%q' "$repo_dir") config user.name $(printf '%q' "$git_name") && git -C $(printf '%q' "$repo_dir") config user.email $(printf '%q' "$git_email")"
-  seed_step sbx_exec_shell "$sbx" "$sandbox" \
-    'if command -v corepack >/dev/null 2>&1; then
-       mkdir -p "$HOME/.local/bin"
-       corepack enable --install-directory "$HOME/.local/bin" || echo "warning: corepack shims unavailable" >&2
-       rm -f "$HOME/.local/bin/yarn"
-       cat >"$HOME/.local/bin/yarn" <<'"'"'EOF'"'"'
-#!/usr/bin/env bash
-dir="$PWD"
-while [[ "$dir" != / ]]; do
-  yarn_path="$(sed -n "s/^yarnPath:[[:space:]]*//p" "$dir/.yarnrc.yml" 2>/dev/null | head -n1)"
-  yarn_path="${yarn_path#\"}"
-  yarn_path="${yarn_path%\"}"
-  if [[ -n "$yarn_path" ]]; then
-    [[ "$yarn_path" = /* ]] || yarn_path="$dir/$yarn_path"
-    [[ -f "$yarn_path" ]] && exec node "$yarn_path" "$@"
-  fi
-  dir="${dir%/*}"
-  [[ -n "$dir" ]] || dir=/
-done
-exec corepack yarn "$@"
-EOF
-       chmod u+x "$HOME/.local/bin/yarn"
-     fi'
+  local bootstrap="/tmp/sbx-work-${id}-bootstrap.sh"
+  seed_step run sbx_copy_to "$sbx" "$sandbox" "$SCRIPT_DIR/vm/bootstrap.sh" "$bootstrap"
+  seed_step run sbx_call "$sbx" exec "$sandbox" -- bash "$bootstrap" \
+    "$repo_dir" "$branch" "$base_sha" "$git_name" "$git_email" "$reuse_existing_branch"
+  seed_step run sbx_call "$sbx" exec "$sandbox" -- rm -f -- "$bootstrap"
 
   if ((${#install_command[@]} > 0)); then
     seed_step run sbx_call "$sbx" policy allow network --sandbox "$sandbox" \
@@ -315,19 +252,21 @@ restore_private_dependencies() {
   fi
 
   local token
-  token="$(windows_ado_pat "$organization" "$id")"
+  token="$(package_read_token "$organization" "$id")"
   [[ -n "$token" ]] || die "Windows Azure authentication returned an empty token"
   [[ "$token" != *$'\n'* ]] ||
     die "Windows Azure authentication returned unexpected multi-line output"
-  local forwarded_wslenv="${WSLENV:+${WSLENV}:}ADO_NPM_TOKEN"
-  WSLENV="$forwarded_wslenv" ADO_NPM_TOKEN="$token" "$sbx" exec --no-input \
+  local exit_code=0
+  ADO_NPM_TOKEN="$token" sbx_with_env "$sbx" ADO_NPM_TOKEN -- exec \
     -e ADO_NPM_TOKEN \
     -e YARN_ENABLE_SCRIPTS=false \
     -e npm_config_ignore_scripts=true \
     -e PNPM_CONFIG_IGNORE_SCRIPTS=true \
     "$sandbox" -- \
-    bash -lc "$PACKAGE_RUNNER" bash "$repo_dir" "${install_command[@]}"
-  unset token ADO_NPM_TOKEN
+    bash -lc "$PACKAGE_RUNNER" bash "$repo_dir" "${install_command[@]}" ||
+    exit_code=$?
+  unset token
+  [[ "$exit_code" -eq 0 ]] || return "$exit_code"
 
   case "$executable" in
     yarn)

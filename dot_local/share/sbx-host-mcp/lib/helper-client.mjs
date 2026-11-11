@@ -9,6 +9,7 @@ export function createHelperClient({
   maxBuffer = 8 * 1024 * 1024,
   maxResult = 32 * 1024,
   timeout = 15 * 60 * 1000,
+  env = process.env,
 }) {
   function truncate(text) {
     if (text.length <= maxResult) return text;
@@ -31,6 +32,7 @@ export function createHelperClient({
       [helper, ...args],
       {
         cwd: home,
+        env,
         encoding: "utf8",
         maxBuffer,
         timeout,

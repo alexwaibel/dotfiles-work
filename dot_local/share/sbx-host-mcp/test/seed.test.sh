@@ -147,7 +147,7 @@ SBX_WORK_REPOS_ROOT="$repos_root" \
   bash "$script" seed 132 followup example-repo true >/dev/null
 if [[ "$(jq -r '.baseSha' "${state_root}/132.json")" == "$followup_sha" ]] &&
   [[ "$(jq -r '.hostWorktree' "${state_root}/132.json")" == "/preserved/worktree" ]] &&
-  grep -q "checkout -B $followup_branch $followup_sha" "$fake_sbx_log"; then
+  grep -q "bootstrap.sh /home/agent/workspace/example-repo $followup_branch $followup_sha Test User test@example.com true" "$fake_sbx_log"; then
   record_pass "follow-up seed reuses current remote PR branch"
 else
   record_fail "follow-up seed reuses current remote PR branch"
@@ -257,11 +257,12 @@ SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_SBX_BIN="$fake_sbx" \
   SBX_WORK_POWERSHELL_BIN="$fake_powershell" \
   SBX_WORK_ADO_ORGANIZATION=example \
+  WSLENV="" \
   bash "$script" seed 129 windows-auth example-repo >/dev/null
 if [[ -f "${state_root}/129.json" ]] &&
   grep -q 'azureauth ado pat' "$fake_powershell_log" &&
   grep -q -- '-e ADO_NPM_TOKEN' "$fake_sbx_log" &&
-  grep -Eq '^forwarded:.*ADO_NPM_TOKEN:[1-9][0-9]*$' "$fake_sbx_log" &&
+  grep -Eq '^forwarded::[1-9][0-9]*$' "$fake_sbx_log" &&
   grep -q 'node_modules/.yarn-state.yml' "$fake_sbx_log" &&
   ! grep -q 'package-read-token' "$fake_sbx_log"; then
   printf 'PASS: Windows auth token stays out of VM command arguments\n'
@@ -269,6 +270,25 @@ if [[ -f "${state_root}/129.json" ]] &&
 else
   printf 'FAIL: Windows auth token stays out of VM command arguments\n'
   fail=$((fail + 1))
+fi
+
+windows_sbx="${tmp_dir}/fake-sbx.exe"
+sed '1c#!/bin/bash' "$fake_sbx" >"$windows_sbx"
+chmod u+x "$windows_sbx"
+: >"$fake_sbx_log"
+SBX_WORK_REPOS_ROOT="$repos_root" \
+  SBX_WORK_STATE_ROOT="$state_root" \
+  SBX_WORK_SBX_BIN="$windows_sbx" \
+  SBX_WORK_WINDOWS_GIT_BIN=/bin/true \
+  SBX_WORK_POWERSHELL_BIN="$fake_powershell" \
+  SBX_WORK_ADO_ORGANIZATION=example \
+  WSLENV=EXISTING \
+  bash "$script" seed 134 windows-adapter example-repo >/dev/null
+if grep -Eq '^forwarded:EXISTING:ADO_NPM_TOKEN(:PATH/lp)?:[1-9][0-9]*$' "$fake_sbx_log" &&
+  ! grep -q 'package-read-token' "$fake_sbx_log"; then
+  record_pass "Windows adapter forwards package environment without exposing the token"
+else
+  record_fail "Windows adapter forwards package environment without exposing the token"
 fi
 
 exec 8>"${state_root}/operation.lock"
@@ -281,5 +301,35 @@ expect_failure "reject concurrent operation" \
   bash "$script" --dry-run seed 124 another-slug example-repo
 flock -u 8
 
+package_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+bootstrap_repo="${tmp_dir}/bootstrap-vm"
+bootstrap_home="${tmp_dir}/bootstrap-home"
+bootstrap_bin="${tmp_dir}/bootstrap-bin"
+git clone -q "$remote" "$bootstrap_repo"
+mkdir -p "$bootstrap_bin" "$bootstrap_home"
+printf '#!/usr/bin/env bash\nexit 0\n' >"${bootstrap_bin}/corepack"
+chmod u+x "${bootstrap_bin}/corepack"
+bootstrap_base="$(git -C "$bootstrap_repo" rev-parse HEAD)"
+HOME="$bootstrap_home" PATH="$bootstrap_bin:$PATH" \
+  bash "$package_root/vm/bootstrap.sh" "$bootstrap_repo" \
+    users/alwaibel/agent/150-bootstrap "$bootstrap_base" "VM User" vm@example.com false >/dev/null
+if [[ "$(git -C "$bootstrap_repo" branch --show-current)" == users/alwaibel/agent/150-bootstrap ]] &&
+  [[ "$(git -C "$bootstrap_repo" config user.email)" == vm@example.com ]]; then
+  record_pass "standalone VM bootstrap checks out the pinned base and sets local identity"
+else
+  record_fail "standalone VM bootstrap checks out the pinned base and sets local identity"
+fi
+expect_success "VM bootstrap supports an existing follow-up branch" env \
+  HOME="$bootstrap_home" PATH="$bootstrap_bin:$PATH" \
+  bash "$package_root/vm/bootstrap.sh" "$bootstrap_repo" \
+    users/alwaibel/agent/150-bootstrap "$bootstrap_base" "VM User" vm@example.com true
+mkdir -p "$bootstrap_repo/.yarn/releases"
+printf 'yarnPath: ".yarn/releases/fixture.cjs"\n' >"$bootstrap_repo/.yarnrc.yml"
+printf 'console.log("repository yarn");\n' >"$bootstrap_repo/.yarn/releases/fixture.cjs"
+if [[ "$(cd "$bootstrap_repo" && HOME="$bootstrap_home" "$bootstrap_home/.local/bin/yarn")" == "repository yarn" ]]; then
+  record_pass "bootstrap Yarn wrapper selects the repository-pinned release"
+else
+  record_fail "bootstrap Yarn wrapper selects the repository-pinned release"
+fi
 
 finish_tests

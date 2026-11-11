@@ -31,64 +31,6 @@ acquire_lock() {
     die "another sbx-work operation is already running"
 }
 
-find_sbx() {
-  if [[ -n "${SBX_WORK_SBX_BIN:-}" ]]; then
-    printf '%s\n' "$SBX_WORK_SBX_BIN"
-    return
-  fi
-  if command -v sbx.exe >/dev/null 2>&1; then
-    command -v sbx.exe
-    return
-  fi
-  local windows_sbx="/mnt/c/Users/${USER}/AppData/Local/DockerSandboxes/bin/sbx.exe"
-  [[ -x "$windows_sbx" ]] || die "sbx.exe not found; set SBX_WORK_SBX_BIN"
-  printf '%s\n' "$windows_sbx"
-}
-
-sbx_call() {
-  local sbx="$1"
-  shift
-  local command="$1"
-  shift
-  local shim_dir="/mnt/c/Users/${USER}/AppData/Local/DockerSandboxes/compat"
-  if [[ "$sbx" == *.exe && -x "$shim_dir/git.exe" ]]; then
-    WSLENV="${WSLENV:+${WSLENV}:}PATH/lp" PATH="$shim_dir" \
-      "$sbx" "$command" --no-input "$@"
-  else
-    "$sbx" "$command" --no-input "$@"
-  fi
-}
-
-windows_git_command() {
-  local git_bin="${SBX_WORK_WINDOWS_GIT_BIN:-git.exe}"
-  local shim_dir="/mnt/c/Users/${USER}/AppData/Local/DockerSandboxes/compat"
-  if [[ "$git_bin" == *.exe && -x "$shim_dir/git.exe" ]]; then
-    PATH="$shim_dir:$PATH" "$git_bin" "$@"
-  else
-    "$git_bin" "$@"
-  fi
-}
-
-windows_git() {
-  local repo_path="$1"
-  shift
-  if [[ "${SBX_WORK_WINDOWS_GIT_BIN:-git.exe}" == *.exe ]]; then
-    windows_git_command -C "$(win_path "$repo_path")" "$@"
-  else
-    windows_git_command -C "$repo_path" "$@"
-  fi
-}
-
-ensure_windows_safe_directory() {
-  local repo_path="$1"
-  local safe_directory
-  safe_directory="%(prefix)/$(wslpath -m "$repo_path")"
-  if ! windows_git_command config --global --fixed-value --get-all \
-    safe.directory "$safe_directory" >/dev/null 2>&1; then
-    windows_git_command config --global --add safe.directory "$safe_directory"
-  fi
-}
-
 sandbox_exists() {
   local sbx="$1"
   local sandbox="$2"
@@ -109,7 +51,7 @@ clear_stale_state() {
     die "metadata sandbox mismatch for work item $id"
   sandbox_exists "$sbx" "$sandbox" &&
     die "metadata and sandbox already exist for work item $id"
-  jq -e 'has("hostWorktree") or has("exportedCommit") or has("syncedCommit")' \
+  jq -e 'has("hostWorktree") or has("importedCommit") or has("exportedCommit") or has("syncedCommit")' \
     "$file" >/dev/null &&
     die "stale metadata has exported host work; remove it manually after review: $file"
 
@@ -128,7 +70,7 @@ inspect_work() {
   if sandbox_exists "$(find_sbx)" "$sandbox"; then
     sandbox_status="present"
   elif jq -e \
-    'has("hostWorktree") or has("exportedCommit") or has("syncedCommit")' \
+    'has("hostWorktree") or has("importedCommit") or has("exportedCommit") or has("syncedCommit")' \
     "$file" >/dev/null; then
     sandbox_status="missing-exported"
   else
@@ -146,6 +88,10 @@ inspect_work() {
       baseSha,
       repoDir,
       hostWorktree,
+      importedCommit,
+      importedRef,
+      integratedCommit,
+      pendingIntegration,
       exportedCommit,
       syncedCommit,
       patchPreserved
@@ -280,15 +226,4 @@ update_state() {
   tmp="${file}.tmp"
   jq "$@" "$filter" "$file" >"$tmp"
   mv "$tmp" "$file"
-}
-
-win_path() {
-  wslpath -w "$1"
-}
-
-sbx_exec_shell() {
-  local sbx="$1"
-  local sandbox="$2"
-  local command="$3"
-  run sbx_call "$sbx" exec "$sandbox" -- bash -lc "$command"
 }

@@ -59,6 +59,12 @@ shift
 set -- "$command" "$@"
 if [[ "$1" == "exec" ]]; then
   case "$*" in
+    *"status --porcelain"*)
+      printf '%s' "${FAKE_VM_DIRTY:-}"
+      ;;
+    *"branch --show-current"*)
+      printf '%s\n' "${FAKE_VM_WRONG_BRANCH:-$FAKE_VM_BRANCH}"
+      ;;
     *"rev-parse HEAD"*)
       printf '%s\n' "$FAKE_VM_COMMIT"
       ;;
@@ -67,7 +73,7 @@ if [[ "$1" == "exec" ]]; then
 fi
 if [[ "$1" == "cp" ]]; then
   if [[ "$2" == *:* ]]; then
-    cp "$FAKE_VM_BUNDLE" "$(wslpath -u "$3")"
+    cp "$FAKE_VM_BUNDLE" "$3"
   fi
   exit 0
 fi
@@ -84,7 +90,7 @@ repo="$2"
 command="$3"
 case "$command" in
   fetch)
-    git -C "$repo" fetch "$FAKE_VM_BUNDLE" "$5"
+    git -C "$repo" fetch "$FAKE_VM_BUNDLE" "${@: -1}"
     ;;
   push)
     exit 0
@@ -95,9 +101,10 @@ case "$command" in
 esac
 EOF
 chmod u+x "$fake_windows_git"
-run_export_fixture() {
+run_import_fixture() {
   FAKE_VM_COMMIT="$export_vm_commit" \
     FAKE_VM_BUNDLE="$export_bundle" \
+    FAKE_VM_BRANCH="$(jq -r '.branch' "${state_root}/${1:-130}.json")" \
     FAKE_WINDOWS_GIT_LOG="$fake_windows_git_log" \
     SBX_WORK_REPOS_ROOT="$repos_root" \
     SBX_WORK_STATE_ROOT="$state_root" \
@@ -105,6 +112,51 @@ run_export_fixture() {
     SBX_WORK_WINDOWS_GIT_BIN="$fake_windows_git" \
     bash "$script" export "${1:-130}"
 }
+
+run_export_fixture() {
+  run_import_fixture "${1:-130}" &&
+    SBX_WORK_REPOS_ROOT="$repos_root" \
+      SBX_WORK_STATE_ROOT="$state_root" \
+      bash "$script" integrate "${1:-130}"
+}
+
+run_import_fixture >/dev/null
+if [[ "$(jq -r '.importedCommit' "${state_root}/130.json")" == "$export_vm_commit" ]] &&
+  [[ "$(git -C "$export_repo" rev-parse HEAD)" == "$export_origin_head" ]] &&
+  [[ ! -d "${repos_root}/worktrees" && ! -f "$fake_windows_git_log" ]]; then
+  record_pass "bundle import preserves exact VM SHA without Windows Git or worktree changes"
+else
+  record_fail "bundle import preserves exact VM SHA without Windows Git or worktree changes"
+fi
+
+git -C "$export_repo" remote set-url origin "${tmp_dir}/absent-origin.git"
+expect_success "import is independent of origin connectivity" run_import_fixture
+git -C "$export_repo" remote set-url origin "$export_remote"
+if FAKE_VM_DIRTY=modified run_import_fixture >/dev/null 2>&1; then
+  record_fail "dirty VM cannot replace the imported commit"
+else
+  record_pass "dirty VM cannot replace the imported commit"
+fi
+if FAKE_VM_WRONG_BRANCH=other run_import_fixture >/dev/null 2>&1; then
+  record_fail "import rejects unexpected VM branch"
+else
+  record_pass "import rejects unexpected VM branch"
+fi
+expected_vm_commit="$export_vm_commit"
+export_vm_commit="$export_origin_head"
+expect_failure "import rejects a bundle that does not match captured HEAD" run_import_fixture
+export_vm_commit="$expected_vm_commit"
+
+cp "$export_bundle" "${tmp_dir}/valid-export.bundle"
+cp "${state_root}/130.json" "${tmp_dir}/import-before-failure.json"
+printf 'corrupt bundle\n' >"$export_bundle"
+expect_failure "import rejects corrupt bundle" run_import_fixture
+if cmp -s "${state_root}/130.json" "${tmp_dir}/import-before-failure.json"; then
+  record_pass "failed bundle verification preserves the last successful import"
+else
+  record_fail "failed bundle verification preserves the last successful import"
+fi
+cp "${tmp_dir}/valid-export.bundle" "$export_bundle"
 
 run_export_fixture 130 >/dev/null
 export_worktree="${repos_root}/worktrees/export-repo/130-export-topology"
@@ -114,17 +166,22 @@ if git -C "$export_worktree" merge-base --is-ancestor \
   [[ -f "${export_worktree}/agent.txt" ]] &&
   [[ "$(jq -r '.patchPreserved' "${state_root}/130.json")" == "true" ]] &&
   [[ "$exported_head" != "$export_vm_commit" ]]; then
-  printf 'PASS: export rebases VM commit after advanced base\n'
+  printf 'PASS: explicit integration rebases VM commit after advanced base\n'
   pass=$((pass + 1))
 else
-  printf 'FAIL: export rebases VM commit after advanced base\n'
+  printf 'FAIL: explicit integration rebases VM commit after advanced base\n'
   fail=$((fail + 1))
 fi
 
-jq 'del(.hostWorktree, .exportedCommit, .patchPreserved, .pendingExport)' \
+jq 'del(.hostWorktree, .integratedCommit, .exportedCommit, .patchPreserved, .pendingExport)' \
   "${state_root}/130.json" >"${state_root}/130.json.tmp"
 mv "${state_root}/130.json.tmp" "${state_root}/130.json"
 expect_success "recover legacy first export after a completed equivalent rebase" \
+  run_export_fixture
+jq '.exportedCommit = .integratedCommit | del(.integratedCommit)' \
+  "${state_root}/130.json" >"${state_root}/130.json.tmp"
+mv "${state_root}/130.json.tmp" "${state_root}/130.json"
+expect_success "integration accepts and migrates an older successful export record" \
   run_export_fixture
 
 export_iteration_vm="${tmp_dir}/export-iteration-vm"
@@ -145,7 +202,7 @@ expect_success "export follow-up excludes upstream commits from stale seed base"
 exported_head="$(git -C "$export_worktree" rev-parse HEAD)"
 expect_success "retry verifies already-rebased export without fast-forward" \
   run_export_fixture
-if [[ "$(jq -r '.exportedCommit' "${state_root}/130.json")" == "$exported_head" ]] &&
+if [[ "$(jq -r '.integratedCommit' "${state_root}/130.json")" == "$exported_head" ]] &&
   [[ "$(git -C "$export_worktree" rev-parse HEAD)" == "$exported_head" ]] &&
   [[ "$(cat "${export_worktree}/agent.txt")" == "simplified agent" ]]; then
   printf 'PASS: retry preserves branch and records verified commit\n'
@@ -156,12 +213,13 @@ else
 fi
 
 printf 'unreviewed host change\n' >"${export_worktree}/agent.txt"
-expect_failure "export rejects dirty host worktree" run_export_fixture
+expect_success "import leaves dirty host work untouched" run_import_fixture
+expect_failure "integration rejects dirty host worktree" run_export_fixture
 git -C "$export_worktree" commit -qam "Unreviewed host change"
 unreviewed_head="$(git -C "$export_worktree" rev-parse HEAD)"
 expect_failure "retry rejects changed host patch" run_export_fixture
 if [[ "$(git -C "$export_worktree" rev-parse HEAD)" == "$unreviewed_head" ]] &&
-  [[ "$(jq -r '.exportedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
+  [[ "$(jq -r '.integratedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
   printf 'PASS: rejected retry preserves host work and transfer metadata\n'
   pass=$((pass + 1))
 else
@@ -173,7 +231,7 @@ reverted_head="$(git -C "$export_worktree" rev-parse HEAD)"
 expect_failure "retry rejects equivalent patch with unrecorded history" \
   run_export_fixture
 if [[ "$(git -C "$export_worktree" rev-parse HEAD)" == "$reverted_head" ]] &&
-  [[ "$(jq -r '.exportedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
+  [[ "$(jq -r '.integratedCommit' "${state_root}/130.json")" == "$exported_head" ]]; then
   printf 'PASS: rejected equivalent history preserves recorded export\n'
   pass=$((pass + 1))
 else
@@ -184,6 +242,7 @@ git -C "$export_worktree" reset --hard "$exported_head" >/dev/null
 expect_success "retry accepts the exact recorded export" run_export_fixture
 
 FAKE_VM_COMMIT="$exported_head" \
+  FAKE_VM_BRANCH="$export_branch" \
   FAKE_VM_BUNDLE="$export_bundle" \
   SBX_WORK_REPOS_ROOT="$repos_root" \
   SBX_WORK_STATE_ROOT="$state_root" \
@@ -228,13 +287,14 @@ jq -n \
     baseSha: $base, repoDir: "/home/agent/workspace/export-repo"
   }' >"${state_root}/140.json"
 
-expect_failure "first export stops on a real rebase conflict" run_export_fixture 140
+expect_success "import is independent of conflicting target history" run_import_fixture 140
+expect_failure "explicit integration stops on a real rebase conflict" run_export_fixture 140
 if jq -e --arg source "$export_vm_commit" --arg target "$conflict_target" \
   --arg worktree "$conflict_worktree" \
-  '.pendingExport.sourceCommit == $source and
-   .pendingExport.targetCommit == $target and
+  '.pendingIntegration.sourceCommit == $source and
+   .pendingIntegration.targetCommit == $target and
    .hostWorktree == $worktree and
-   .patchPreserved == false and .exportedCommit == null' \
+   .patchPreserved == false and .integratedCommit == null' \
   "${state_root}/140.json" >/dev/null; then
   record_pass "conflicting first export records pending provenance, not success"
 else
@@ -269,17 +329,20 @@ else
 fi
 git -C "$conflict_worktree" reset --hard "$resolved_head" >/dev/null
 
-jq '.pendingExport.sourceCommit = "different-source"' \
+jq '.pendingIntegration.sourceCommit = "different-source"' \
   "${state_root}/140.json" >"${state_root}/140.json.tmp"
 mv "${state_root}/140.json.tmp" "${state_root}/140.json"
 expect_failure "pending recovery rejects a mismatched source" run_export_fixture 140
 cp "${tmp_dir}/pending-export.json" "${state_root}/140.json"
 
-expect_success "recover first export after preserving target-only index changes" \
+jq '.pendingExport = .pendingIntegration | del(.pendingIntegration)' \
+  "${state_root}/140.json" >"${state_root}/140.json.tmp"
+mv "${state_root}/140.json.tmp" "${state_root}/140.json"
+expect_success "recover older pending export while preserving target-only index changes" \
   run_export_fixture 140
 if jq -e --arg head "$resolved_head" \
-  '.exportedCommit == $head and .patchPreserved == true and
-   .pendingExport == null' "${state_root}/140.json" >/dev/null &&
+  '.integratedCommit == $head and .patchPreserved == true and
+   .pendingIntegration == null' "${state_root}/140.json" >/dev/null &&
   [[ "$(cat "${conflict_worktree}/base.txt")" == $'base\ntarget index entry' ]] &&
   [[ "$(cat "${conflict_worktree}/recovered.txt")" == "final change" ]]; then
   record_pass "successful recovery records verification and retains target content"
