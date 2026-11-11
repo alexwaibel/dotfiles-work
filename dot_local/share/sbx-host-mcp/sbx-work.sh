@@ -18,6 +18,7 @@ Usage:
   sbx-work inspect WORK_ITEM
   sbx-work [--dry-run] seed WORK_ITEM SLUG REPO [REUSE_EXISTING_BRANCH]
   sbx-work dispatch WORK_ITEM TASK_ID
+  sbx-work task-wait TASK_ID [TIMEOUT_SECONDS]
   sbx-work [--dry-run] export WORK_ITEM
   sbx-work [--dry-run] sync WORK_ITEM
 
@@ -26,6 +27,7 @@ Commands:
   seed      Create a native clone-mode sandbox, create the task branch, and
             restore detected Azure Artifacts dependencies before agent startup.
   dispatch  Run one noninteractive Copilot task in the existing sandbox.
+  task-wait Wait locally for task completion (default 1800s, maximum 3600s).
   export    Bundle committed VM work into a standard host worktree and rebase.
   sync      Transfer the rebased host branch back into the VM.
 
@@ -90,6 +92,11 @@ case "$command_name" in
   dispatch)
     (($# == 2)) || die "dispatch requires WORK_ITEM TASK_ID"
     dispatch_task "$1" "$2"
+    ;;
+  task-wait)
+    (($# >= 1 && $# <= 2)) || die "task-wait requires TASK_ID [TIMEOUT_SECONDS]"
+    validate_task_id "$1"
+    exec node "$SCRIPT_DIR/task-wait.mjs" "$tasks_root" "$@"
     ;;
   export)
     (($# == 1)) || die "export requires WORK_ITEM"

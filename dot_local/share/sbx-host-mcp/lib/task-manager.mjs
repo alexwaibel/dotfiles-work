@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { watch } from "node:fs";
 import {
   mkdir,
   open,
@@ -143,6 +144,52 @@ export function createTaskManager({
     }
   }
 
+  function wait(taskId, timeoutMs) {
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 3600000) {
+      throw new Error("Wait timeout must be between 1 ms and 1 hour");
+    }
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      let timer;
+      // Task metadata is atomically replaced, so watch its directory.
+      const watcher = watch(tasksRoot, (_event, filename) => {
+        if (
+          !filename ||
+          filename === `${taskId}.json` ||
+          filename === `${taskId}.pid`
+        ) {
+          check().catch(fail);
+        }
+      });
+
+      function finish(error, value) {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        watcher.close();
+        if (error) reject(error);
+        else resolve(value);
+      }
+
+      function fail(error) {
+        finish(error);
+      }
+
+      async function check(deadlineReached = false) {
+        if (finished) return;
+        const task = await read(taskId);
+        const active = ["queued", "running"].includes(task.status);
+        if (!active || deadlineReached) {
+          finish(undefined, { task, timedOut: active });
+        }
+      }
+
+      watcher.on("error", fail);
+      timer = setTimeout(() => check(true).catch(fail), timeoutMs);
+      check().catch(fail);
+    });
+  }
+
   async function cancel(taskId) {
     const task = await read(taskId);
     if (!["queued", "running"].includes(task.status)) {
@@ -173,5 +220,5 @@ export function createTaskManager({
     return task;
   }
 
-  return { cancel, dispatch, logs, read };
+  return { cancel, dispatch, logs, read, wait };
 }

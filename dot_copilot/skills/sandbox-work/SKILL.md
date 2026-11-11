@@ -59,9 +59,20 @@ Lifecycle scripts are disabled while the short-lived package-read PAT exists.
    VM repository path and branch, repository-instruction requirement, validation
    expectations, commit trailers, and the prohibition on push/PR/external
    credentials. Do not include host secrets or unrelated session context.
-5. Call `sbx-host.dispatch`. Poll `sbx-host.task_status` and read
-   `sbx-host.task_logs` until it completes. Do not use shell sleeps or ask the
-   user to proxy the prompt/results through an interactive terminal.
+5. Call `sbx-host.dispatch`, then run `sbx-work task-wait <task-id>` once as
+   an attached background shell command (`mode: "async"`, without detach).
+   The command watches local task metadata and returns the terminal status
+   plus a bounded log tail; shell completion wakes the host session.
+   Continue independent work or yield until that completion notification,
+   then read the command output once. Do not poll status, repeatedly fetch
+   log tails, or create short-lived sleep/watch loops.
+   The default wait deadline is 1800 seconds; an optional second argument
+   selects 1-3600 seconds. Exit 124 means the deadline elapsed, not that the
+   task was canceled. On timeout, inspect status/logs once and reassess with
+   the user rather than automatically rearming the waiter or dispatching
+   another task. Use `sbx-host.task_status` and `sbx-host.task_logs` for
+   recovery or an explicit progress request, not routine monitoring.
+   Do not ask the user to proxy the prompt/results through a terminal.
 6. If the task returns a question or bounded blocker, resolve it on the host and
    dispatch a fresh follow-up task in the same VM. Each dispatch is a fresh
    Copilot process with the repository state and dependencies preserved.
