@@ -95,14 +95,18 @@ case "$command" in
 esac
 EOF
 chmod u+x "$fake_windows_git"
-FAKE_VM_COMMIT="$export_vm_commit" \
-  FAKE_VM_BUNDLE="$export_bundle" \
-  FAKE_WINDOWS_GIT_LOG="$fake_windows_git_log" \
-  SBX_WORK_REPOS_ROOT="$repos_root" \
-  SBX_WORK_STATE_ROOT="$state_root" \
-  SBX_WORK_SBX_BIN="$fake_export_sbx" \
-  SBX_WORK_WINDOWS_GIT_BIN="$fake_windows_git" \
-  bash "$script" export 130 >/dev/null
+run_export_fixture() {
+  FAKE_VM_COMMIT="$export_vm_commit" \
+    FAKE_VM_BUNDLE="$export_bundle" \
+    FAKE_WINDOWS_GIT_LOG="$fake_windows_git_log" \
+    SBX_WORK_REPOS_ROOT="$repos_root" \
+    SBX_WORK_STATE_ROOT="$state_root" \
+    SBX_WORK_SBX_BIN="$fake_export_sbx" \
+    SBX_WORK_WINDOWS_GIT_BIN="$fake_windows_git" \
+    bash "$script" export "${1:-130}"
+}
+
+run_export_fixture 130 >/dev/null
 export_worktree="${repos_root}/worktrees/export-repo/130-export-topology"
 exported_head="$(git -C "$export_worktree" rev-parse HEAD)"
 if git -C "$export_worktree" merge-base --is-ancestor \
@@ -117,6 +121,12 @@ else
   fail=$((fail + 1))
 fi
 
+jq 'del(.hostWorktree, .exportedCommit, .patchPreserved, .pendingExport)' \
+  "${state_root}/130.json" >"${state_root}/130.json.tmp"
+mv "${state_root}/130.json.tmp" "${state_root}/130.json"
+expect_success "recover legacy first export after a completed equivalent rebase" \
+  run_export_fixture
+
 export_iteration_vm="${tmp_dir}/export-iteration-vm"
 git clone -q --branch "$export_branch" "$export_worktree" "$export_iteration_vm"
 git -C "$export_iteration_vm" config user.name "VM Agent"
@@ -129,17 +139,6 @@ printf 'advanced again\n' >"${export_repo}/advanced-again.txt"
 git -C "$export_repo" add advanced-again.txt
 git -C "$export_repo" commit -qm "Advance master again"
 git -C "$export_repo" push -qu origin master
-
-run_export_fixture() {
-  FAKE_VM_COMMIT="$export_vm_commit" \
-    FAKE_VM_BUNDLE="$export_bundle" \
-    FAKE_WINDOWS_GIT_LOG="$fake_windows_git_log" \
-    SBX_WORK_REPOS_ROOT="$repos_root" \
-    SBX_WORK_STATE_ROOT="$state_root" \
-    SBX_WORK_SBX_BIN="$fake_export_sbx" \
-    SBX_WORK_WINDOWS_GIT_BIN="$fake_windows_git" \
-    bash "$script" export 130
-}
 
 expect_success "export follow-up excludes upstream commits from stale seed base" \
   run_export_fixture
@@ -198,5 +197,94 @@ else
   fail=$((fail + 1))
 fi
 
+conflict_vm="${tmp_dir}/conflict-vm"
+conflict_branch="users/alwaibel/agent/140-export-conflict"
+git clone -q "$export_remote" "$conflict_vm"
+git -C "$conflict_vm" config user.name "VM Agent"
+git -C "$conflict_vm" config user.email "agent@example.com"
+conflict_base="$(git -C "$conflict_vm" rev-parse HEAD)"
+git -C "$conflict_vm" checkout -qb "$conflict_branch"
+printf 'base\nagent index entry\n' >"${conflict_vm}/base.txt"
+printf 'initial change\n' >"${conflict_vm}/recovered.txt"
+git -C "$conflict_vm" add base.txt recovered.txt
+git -C "$conflict_vm" commit -qm "Add change and temporary index entry"
+printf 'base\n' >"${conflict_vm}/base.txt"
+printf 'final change\n' >"${conflict_vm}/recovered.txt"
+git -C "$conflict_vm" commit -qam "Finalize change and remove index entry"
+export_vm_commit="$(git -C "$conflict_vm" rev-parse HEAD)"
+git -C "$conflict_vm" bundle create "$export_bundle" "$conflict_branch" "^$conflict_base"
+
+printf 'base\ntarget index entry\n' >"${export_repo}/base.txt"
+git -C "$export_repo" commit -qam "Advance target index"
+git -C "$export_repo" push -qu origin master
+conflict_target="$(git -C "$export_repo" rev-parse HEAD)"
+conflict_worktree="${repos_root}/worktrees/export-repo/140-export-conflict"
+jq -n \
+  --arg branch "$conflict_branch" \
+  --arg base "$conflict_base" \
+  '{
+    workItem: "140", slug: "export-conflict", repo: "export-repo",
+    sandbox: "wi-140-vm", branch: $branch, baseBranch: "master",
+    baseSha: $base, repoDir: "/home/agent/workspace/export-repo"
+  }' >"${state_root}/140.json"
+
+expect_failure "first export stops on a real rebase conflict" run_export_fixture 140
+if jq -e --arg source "$export_vm_commit" --arg target "$conflict_target" \
+  --arg worktree "$conflict_worktree" \
+  '.pendingExport.sourceCommit == $source and
+   .pendingExport.targetCommit == $target and
+   .hostWorktree == $worktree and
+   .patchPreserved == false and .exportedCommit == null' \
+  "${state_root}/140.json" >/dev/null; then
+  record_pass "conflicting first export records pending provenance, not success"
+else
+  record_fail "conflicting first export records pending provenance, not success"
+fi
+
+cp "${state_root}/140.json" "${tmp_dir}/pending-export.json"
+expect_failure "retry preserves an unresolved rebase" run_export_fixture 140
+if cmp -s "${state_root}/140.json" "${tmp_dir}/pending-export.json" &&
+  [[ -n "$(git -C "$conflict_worktree" diff --name-only --diff-filter=U)" ]]; then
+  record_pass "unresolved retry leaves conflict and metadata untouched"
+else
+  record_fail "unresolved retry leaves conflict and metadata untouched"
+fi
+
+git -C "$conflict_worktree" restore --source=origin/master --staged --worktree -- base.txt
+expect_failure "rebase reaches the temporary-entry removal conflict" \
+  env GIT_EDITOR=true git -C "$conflict_worktree" rebase --continue
+git -C "$conflict_worktree" restore --source=origin/master --staged --worktree -- base.txt
+GIT_EDITOR=true git -C "$conflict_worktree" rebase --continue >/dev/null
+resolved_head="$(git -C "$conflict_worktree" rev-parse HEAD)"
+
+git -C "$conflict_worktree" commit -q --allow-empty -m "Unrecorded host history"
+unrecorded_head="$(git -C "$conflict_worktree" rev-parse HEAD)"
+expect_failure "pending recovery rejects equal patches with extra host history" \
+  run_export_fixture 140
+if [[ "$(git -C "$conflict_worktree" rev-parse HEAD)" == "$unrecorded_head" ]] &&
+  cmp -s "${state_root}/140.json" "${tmp_dir}/pending-export.json"; then
+  record_pass "rejected pending recovery preserves host history and metadata"
+else
+  record_fail "rejected pending recovery preserves host history and metadata"
+fi
+git -C "$conflict_worktree" reset --hard "$resolved_head" >/dev/null
+
+jq '.pendingExport.sourceCommit = "different-source"' \
+  "${state_root}/140.json" >"${state_root}/140.json.tmp"
+mv "${state_root}/140.json.tmp" "${state_root}/140.json"
+expect_failure "pending recovery rejects a mismatched source" run_export_fixture 140
+cp "${tmp_dir}/pending-export.json" "${state_root}/140.json"
+
+expect_success "recover first export after preserving target-only index changes" \
+  run_export_fixture 140
+if jq -e --arg head "$resolved_head" \
+  '.exportedCommit == $head and .patchPreserved == true and
+   .pendingExport == null' "${state_root}/140.json" >/dev/null &&
+  [[ "$(cat "${conflict_worktree}/base.txt")" == $'base\ntarget index entry' ]] &&
+  [[ "$(cat "${conflict_worktree}/recovered.txt")" == "final change" ]]; then
+  record_pass "successful recovery records verification and retains target content"
+else
+  record_fail "successful recovery records verification and retains target content"
+fi
 
 finish_tests
