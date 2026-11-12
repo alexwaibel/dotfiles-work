@@ -81,7 +81,7 @@ by area, by current repo). Do not modify anything on a list.
 Only when the user is about to start an idea:
 1. Confirm the target node by title.
 2. Create an ADO work item using the configured ADO project, team, area, and
-   current iteration (see `/work` and `/standup`) — carry over title, rationale,
+   current iteration (see `/standup`) — carry over title, rationale,
    first step, and any doc link.
 3. In the node, record `- Promoted to [[ADO <id>]] <date>` and add a `#promoted` filetag so it
    drops out of the active backlog (keep the node for provenance). Re-run

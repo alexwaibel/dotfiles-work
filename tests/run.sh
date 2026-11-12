@@ -86,8 +86,8 @@ python3 dot_copilot/skills/audit-mcp-tools/scripts/audit.py \
   --manifest "${tmp_dir}/mcp-tools.json" \
   --skip-live
 
-section "Portable Copilot profile"
-node --test tests/copilot-profile.test.mjs
+section "Copilot configuration"
+node --test tests/acp.test.mjs tests/copilot-profile.test.mjs
 
 section "Copilot hooks"
 bash dot_copilot/hooks/guard-safe-shell.test.sh

@@ -1,3 +1,14 @@
+# Task Framing
+
+- Read the full work item and relevant linked context before proposing a fix.
+  Ask for missing context rather than inventing acceptance criteria from a title
+  or terse description.
+- Distinguish confirmed facts, inferences, and open questions.
+- When scope or product behavior is unclear, discuss it and agree on the next
+  bounded step before implementing. An investigation can be that step. Do not
+  repeat the checkpoint when the conversation already establishes the scope and
+  the user has asked to proceed.
+
 # Code Quality
 
 - **Verify types before proposing an approach.** Don't assume a property exists on a type — check the type definition first, especially at system boundaries.

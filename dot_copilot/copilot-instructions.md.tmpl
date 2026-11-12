@@ -86,8 +86,12 @@ Use the `sandbox-work` skill when the user requests Docker Sandbox work.
 The host gathers context and reviews results; a mountless VM runs repository
 work or experiments. The `sbx-host` bridge exposes VM lifecycle, commands,
 file transfer, and constrained private-package restore, not a prescribed workflow.
+Follow the skill's discussion checkpoint before delegation; choosing isolation
+does not establish the task's scope or approve an implementation.
 
 - Keep external MCP access, Git-remote credentials, integration, and publishing on the host.
+- Read-only host repository inspection for task framing and revision selection is
+  allowed; implementation and dependency execution remain in the VM.
 - Use ordinary Linux Git and `~/repos/.sbx-transfer/` to exchange committed history
   or results. Follow the repository/worktree layout above; never use Windows Git.
 - Private Azure Artifacts credentials belong only in the bridge's restore process,

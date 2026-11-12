@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Launches Copilot in bounded autopilot with a narrow safe-tool allowlist.
+# Launches Copilot interactively with a narrow safe-tool allowlist.
 #
 # MCP availability and safe classifications come from
 # ~/.local/share/chezmoi/.chezmoidata/mcp-tools.json. Run the audit-mcp-tools
@@ -14,8 +14,11 @@ usage() {
   cat <<'EOF'
 Usage: acp [COPILOT_ARGS...]
 
+Defaults to interactive mode. Use --autopilot or --mode autopilot to opt in.
+Tool approval settings are unchanged.
+
 Environment:
-  ACP_MAX_AUTOPILOT_CONTINUES    Autopilot continuation cap (default: 10).
+  ACP_MAX_AUTOPILOT_CONTINUES    Continuation cap when using Autopilot (default: 10).
 EOF
 }
 
@@ -69,8 +72,25 @@ safe_approvals=(
 {{- end }}
 )
 
+mode_args=(--mode interactive)
+skip_value=false
+for argument in "$@"; do
+  if [[ "$skip_value" == true ]]; then
+    skip_value=false
+    continue
+  fi
+  case "$argument" in
+    --) break ;;
+    -p|--prompt|-i|--interactive) skip_value=true ;;
+    --autopilot|--plan|--mode|--mode=*)
+      mode_args=()
+      break
+      ;;
+  esac
+done
+
 permission_args=(
-  --autopilot
+  "${mode_args[@]}"
   --max-autopilot-continues
   "$max_autopilot_continues"
   --allow-tool=write

@@ -9,6 +9,26 @@ Discuss the task and gather context through the host's ADO, Teams, browser, and
 other tools. When useful, delegate a bounded task or experiment to a VM.
 No work-item ID, prescribed branch, or publication workflow is required.
 
+## Discuss before delegating
+
+Choosing a sandbox is an execution preference, not approval of a solution.
+Before creating or seeding a VM, or sending work to an existing one:
+
+Apply the shared Task Framing instructions and wait for agreement on the next
+bounded step. An investigation can be that step; a complete fix design is not
+required before an agreed experiment. Existing agreement need not be repeated.
+
+Read-only host repository inspection is appropriate for understanding the issue
+and selecting a revision; implementation and dependency execution stay in the VM.
+
+Do not silently turn an investigation into implementation. Bring material
+findings or changes of approach back to the user. Once the next step is agreed,
+do not request approval for every routine command.
+
+Use interactive mode for this discussion. Autopilot may answer questions on the
+user's behalf; that is not agreement on missing requirements. If required input
+is unavailable, stop with the open questions rather than dispatching a guessed fix.
+
 ## Bridge
 
 `sbx-host` is a thin Docker `sbx` bridge:
@@ -37,6 +57,8 @@ No bridge operation fetches host Git, selects history, integrates changes, or
 publishes. Windows executable/path handling stays inside the bridge.
 
 ## A simple starting recipe
+
+After the discussion checkpoint:
 
 1. Choose a descriptive VM name and call `create` (or reuse a VM from `list`).
 2. Select the intended committed revision with ordinary Linux Git on the host.
