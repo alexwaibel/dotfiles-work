@@ -82,7 +82,10 @@ Rules:
 
 # Docker Sandbox Delegation
 
-Use the `sandbox-work` skill when the user requests Docker Sandbox work.
+After host-side framing and agreement on the next bounded step, default
+substantial repository implementation, runtime experiments, and dependency
+execution to Docker Sandbox using the `sandbox-work` skill. Do not wait for an
+explicit sandbox request. Honor an explicit request to work locally.
 The host gathers context and reviews results; a mountless VM runs repository
 work or experiments. The `sbx-host` bridge exposes VM lifecycle, commands,
 file transfer, and constrained private-package restore, not a prescribed workflow.
@@ -91,7 +94,11 @@ does not establish the task's scope or approve an implementation.
 
 - Keep external MCP access, Git-remote credentials, integration, and publishing on the host.
 - Read-only host repository inspection for task framing and revision selection is
-  allowed; implementation and dependency execution remain in the VM.
+  allowed. Hand off before installing dependencies or running project tests/builds;
+  missing host tooling is not a reason to provision a local implementation environment.
+- Small documentation/configuration edits may stay local. Keep discussion on the
+  host; once scope is agreed, proceed with delegation without another approval
+  checkpoint unless new uncertainty changes the agreed step.
 - Use ordinary Linux Git and `~/repos/.sbx-transfer/` to exchange committed history
   or results. Follow the repository/worktree layout above; never use Windows Git.
 - Private Azure Artifacts credentials belong only in the bridge's restore process,

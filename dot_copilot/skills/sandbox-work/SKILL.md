@@ -1,13 +1,20 @@
 ---
 name: sandbox-work
-description: Run repository work or experiments in a Docker Sandbox VM. Gather context on the host, create a usable private checkout, run commands or Copilot, and retrieve results for review.
+description: Default execution path for substantial repository implementation, runtime experiments, and dependency execution once scope is agreed, even without an explicit sandbox request. Frame work on the host, run it in a Docker Sandbox VM, and retrieve results for review.
 ---
 
 # Sandbox Work
 
 Discuss the task and gather context through the host's ADO, Teams, browser, and
-other tools. When useful, delegate a bounded task or experiment to a VM.
+other tools. Once the next bounded step is agreed, proactively delegate
+substantial implementation or runtime investigation to a VM. Do not wait for
+the user to request isolation. Honor an explicit request to work locally;
+small documentation/configuration edits may stay on the host.
 No work-item ID, prescribed branch, or publication workflow is required.
+
+Hand off before dependency installation, project tests/builds, or substantial
+source edits. Do not set up a host runtime merely because dependencies or tools
+are missing. A host worktree can still serve integration and review afterward.
 
 ## Discuss before delegating
 
