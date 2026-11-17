@@ -2,7 +2,7 @@
   "copilot": {
     "defaults": {
       "version": 1,
-      "model": "gpt-6.1-sol",
+      "model": "claude-opus-5.5",
       "effortLevel": "default",
       "contextTier": "long_context"
     },
