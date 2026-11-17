@@ -25,6 +25,8 @@ test("acp defaults to interactive execution and preserves explicit mode choices"
   assert.deepEqual(defaults.slice(0, 3), ["copilot", "--mode", "interactive"]);
   assert.ok(!defaults.includes("--autopilot"));
   assert.ok(defaults.includes("--allow-tool=write"));
+  const { copilot } = JSON.parse(execFileSync("chezmoi", ["data", "--format", "json"], { encoding: "utf8" }));
+  assert.deepEqual(defaults.slice(3, 5), ["--model", copilot.defaults.model]);
   assert.deepEqual(defaults.filter(arg => arg.startsWith("--allow-tool=sbx-host")).sort(), [
     "--allow-tool=sbx-host(copy)",
     "--allow-tool=sbx-host(create)",
@@ -39,4 +41,18 @@ test("acp defaults to interactive execution and preserves explicit mode choices"
   }
   assert.deepEqual(invoke(["--", "--autopilot"]).slice(0, 3), ["copilot", "--mode", "interactive"]);
   assert.deepEqual(invoke(["--prompt", "--autopilot"]).slice(0, 3), ["copilot", "--mode", "interactive"]);
+  for (const flags of [
+    ["--model", "custom-model"],
+    ["--model=custom-model"],
+    ["--autopilot", "--model", "custom-model"],
+    ["--mode", "plan", "--model=custom-model"],
+  ]) {
+    const args = invoke(flags);
+    assert.deepEqual(args.filter(arg => arg === "--model" || arg.startsWith("--model=")),
+      flags.filter(arg => arg === "--model" || arg.startsWith("--model=")));
+    assert.deepEqual(args.slice(-flags.length), flags);
+  }
+  for (const flags of [["--prompt", "--model=not-a-flag"], ["--", "--model=not-a-flag"]]) {
+    assert.deepEqual(invoke(flags).slice(3, 5), ["--model", copilot.defaults.model]);
+  }
 });

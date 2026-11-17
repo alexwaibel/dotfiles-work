@@ -15,6 +15,7 @@ usage() {
 Usage: acp [COPILOT_ARGS...]
 
 Defaults to interactive mode. Use --autopilot or --mode autopilot to opt in.
+Passes the shared model default explicitly; use --model to override it.
 Tool approval settings are unchanged.
 
 Environment:
@@ -73,6 +74,7 @@ safe_approvals=(
 )
 
 mode_args=(--mode interactive)
+model_args=(--model {{ .copilot.defaults.model | quote }})
 skip_value=false
 for argument in "$@"; do
   if [[ "$skip_value" == true ]]; then
@@ -82,15 +84,24 @@ for argument in "$@"; do
   case "$argument" in
     --) break ;;
     -p|--prompt|-i|--interactive) skip_value=true ;;
-    --autopilot|--plan|--mode|--mode=*)
+    --autopilot|--plan|--mode=*)
       mode_args=()
-      break
+      ;;
+    --mode)
+      mode_args=()
+      skip_value=true
+      ;;
+    --model=*) model_args=() ;;
+    --model)
+      model_args=()
+      skip_value=true
       ;;
   esac
 done
 
 permission_args=(
   "${mode_args[@]}"
+  "${model_args[@]}"
   --max-autopilot-continues
   "$max_autopilot_continues"
   --allow-tool=write

@@ -98,8 +98,20 @@ After the discussion checkpoint:
    Commands receive `~/.local/bin` on PATH. Use `restore` for private Azure
    Artifacts dependencies; otherwise run the normal install in the VM. Run
    any required post-install setup separately, after private restore finishes.
-5. Execute an experiment directly, or run `copilot --yolo -p '<bounded task>'`
-   in the checkout. Include the relevant context, repository instructions,
+5. Execute an experiment directly, or launch Copilot in the checkout with the
+   seeded model passed explicitly:
+
+   ```bash
+   model="$(node -p 'require(process.env.HOME + "/.copilot/settings.json").model')"
+   copilot --model "$model" --yolo -p '<bounded task>'
+   ```
+
+   Use the same `--model "$model"` argument when resuming a worker with
+   `--resume=<session-id>`, unless the user requested a different model.
+   Existing VMs retain their seeded default; check it against the current shared
+   default before reuse. Managed policy may still override an explicit flag;
+   report that rather than claiming the requested model was used.
+   Include the relevant context, repository instructions,
    expected outcome, and validation requirements. Commit only when authorized.
    Do not include host credentials or unrelated conversation.
 6. Retrieve the result in whatever form is useful: a file, patch, or Git bundle.
