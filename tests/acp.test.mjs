@@ -25,6 +25,13 @@ test("acp defaults to interactive execution and preserves explicit mode choices"
   assert.deepEqual(defaults.slice(0, 3), ["copilot", "--mode", "interactive"]);
   assert.ok(!defaults.includes("--autopilot"));
   assert.ok(defaults.includes("--allow-tool=write"));
+  assert.deepEqual(defaults.filter(arg => arg.startsWith("--allow-tool=sbx-host")).sort(), [
+    "--allow-tool=sbx-host(copy)",
+    "--allow-tool=sbx-host(create)",
+    "--allow-tool=sbx-host(exec)",
+    "--allow-tool=sbx-host(list)",
+    "--allow-tool=sbx-host(restore)",
+  ]);
   for (const flags of [["--autopilot"], ["--mode", "autopilot"], ["--mode=plan"], ["--plan"]]) {
     const args = invoke(flags);
     assert.ok(!args.includes("interactive"));

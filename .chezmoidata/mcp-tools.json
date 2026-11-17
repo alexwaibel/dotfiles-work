@@ -385,7 +385,11 @@
         "stop"
       ],
       "safe": [
-        "list"
+        "copy",
+        "create",
+        "exec",
+        "list",
+        "restore"
       ],
       "highRisk": {
         "copy": "Transfers files between a VM and the bounded host staging directory.",
